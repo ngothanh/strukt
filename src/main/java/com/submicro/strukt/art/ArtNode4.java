@@ -31,7 +31,7 @@ public class ArtNode4<V> implements ArtNode<V> {
         }
 
         final short keyByte = (short) ((key >>> nodeLevel) & 0xFF);
-        int i = 0;
+        int i;
         for (i = 0; i < numChildren; i++) {
             short k = keys[i];
             if (keyByte == k) {
@@ -80,5 +80,27 @@ public class ArtNode4<V> implements ArtNode<V> {
 
             return node16;
         }
+    }
+
+    @Override
+    public V get(long key, int level) {
+        if (level != nodeLevel && ((key ^ nodeKey) & (-1L << (nodeLevel + 8))) != 0) {
+            return null;
+        }
+        final short keyByte = (short) ((key >>> nodeLevel) & 0xFF);
+        for (int i = 0; i < numChildren; i++) {
+            final short index = keys[i];
+            if (index == keyByte) {
+                final Object node = nodes[i];
+                return nodeLevel == 0
+                        ? (V) node
+                        : ((ArtNode<V>) node).get(key, nodeLevel - 8);
+            }
+            if (keyByte < index) {
+                // can give up searching because keys are in sorted order
+                break;
+            }
+        }
+        return null;
     }
 }

@@ -3,6 +3,7 @@ package com.submicro.strukt.art;
 import com.submicro.strukt.art.pool.ObjectsPool;
 
 public class ArtNode16<V> implements ArtNode<V> {
+
     private final ObjectsPool objectsPool;
 
     public ArtNode16(ObjectsPool objectsPool) {
@@ -12,6 +13,11 @@ public class ArtNode16<V> implements ArtNode<V> {
 
     @Override
     public ArtNode<V> put(long key, int level, V value) {
+
+    }
+
+    @Override
+    public V get(long key, int level) {
 
     }
 
