@@ -1,8 +1,12 @@
 package com.submicro.strukt.art.pool;
 
+import com.submicro.strukt.art.ArtNode4;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 public class ObjectsPool {
     public static final int ORDER = 0;
@@ -44,6 +48,17 @@ public class ObjectsPool {
 
         for (int type : keys) {
             this.pools[type] = new ArrayStack(sizesConfig.get(type));
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public <T> T get(final int type, final Function<ObjectsPool, T> constructor) {
+        final T obj = (T) pools[type].pop();  // pollFirst is cheaper for empty pool
+
+        if (obj == null) {
+            return constructor.apply(this);
+        } else {
+            return obj;
         }
     }
 

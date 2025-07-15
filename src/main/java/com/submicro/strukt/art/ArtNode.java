@@ -2,9 +2,13 @@ package com.submicro.strukt.art;
 
 public interface ArtNode<V> {
 
-    V get(long key);
+    ArtNode<V> put(long key, int level, V value);
 
-    ArtNode<V> insert(long key, V value);
+    default boolean requiresBranching(long key, int level) {
+        //TODO
+    }
 
-    ArtNode<V> delete(long key);
+    default ArtNode<V> createBranch(long key, V value, int level) {
+        //TODO
+    }
 }
