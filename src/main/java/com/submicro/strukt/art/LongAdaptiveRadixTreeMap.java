@@ -1,8 +1,11 @@
 package com.submicro.strukt.art;
 
 import com.submicro.strukt.art.pool.ObjectsPool;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public class LongAdaptiveRadixTreeMap<V> {
+
     private static final int INITIAL_LEVEL = 56;
 
     private ArtNode<V> root = null;
@@ -35,6 +38,15 @@ public class LongAdaptiveRadixTreeMap<V> {
                 // TODO put old into the pool
                 root = upSizedNode;
             }
+        }
+        log.debug(printDiagram());
+    }
+
+    public String printDiagram() {
+        if (root != null) {
+            return root.printDiagram("", INITIAL_LEVEL);
+        } else {
+            return "";
         }
     }
 

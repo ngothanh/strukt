@@ -2,7 +2,7 @@ package com.submicro.strukt.art;
 
 import com.submicro.strukt.art.pool.ObjectsPool;
 
-public class ArtNode4<V> implements ArtNode<V> {
+public class  ArtNode4<V> implements ArtNode<V> {
 
     final short[] keys = new short[4];
     final Object[] nodes = new Object[4];
@@ -129,5 +129,33 @@ public class ArtNode4<V> implements ArtNode<V> {
         }
         this.nodeKey = key1; // leading part the same for both keys
         this.nodeLevel = level;
+    }
+
+    @Override
+    public String printDiagram(String prefix, int level) {
+        StringBuilder sb = new StringBuilder();
+
+        // Show current node info
+        sb.append(prefix).append("ArtNode4[level=").append(nodeLevel)
+          .append(", key=0x").append(Long.toHexString(nodeKey))
+          .append(", children=").append(numChildren).append("]\n");
+
+        // Show each child
+        for (int i = 0; i < numChildren; i++) {
+            sb.append(prefix).append("├─ key[").append(i).append("]=0x")
+              .append(String.format("%02X", keys[i] & 0xFF));
+
+            if (nodeLevel == 0) {
+                // Leaf value
+                sb.append(" → ").append(nodes[i]).append("\n");
+            } else {
+                // Child node
+                sb.append("\n");
+                String childPrefix = prefix + "│  ";
+                sb.append(((ArtNode<V>) nodes[i]).printDiagram(childPrefix, nodeLevel - 8));
+            }
+        }
+
+        return sb.toString();
     }
 }

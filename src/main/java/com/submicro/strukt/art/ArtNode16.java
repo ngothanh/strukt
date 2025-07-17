@@ -26,6 +26,12 @@ public class ArtNode16<V> implements ArtNode<V> {
         return objectsPool;
     }
 
+    @Override
+    public String printDiagram(String prefix, int level) {
+        //TODO
+        return "";
+    }
+
     public void initFromNode4(ArtNode4<V> node4, short subKey, Object newElement) {
 
     }
