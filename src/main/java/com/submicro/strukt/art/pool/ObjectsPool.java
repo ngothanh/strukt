@@ -1,12 +1,9 @@
 package com.submicro.strukt.art.pool;
 
-import com.submicro.strukt.art.ArtNode4;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 public class ObjectsPool {
     public static final int ORDER = 0;
