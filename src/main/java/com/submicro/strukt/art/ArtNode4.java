@@ -26,8 +26,11 @@ public class ArtNode4<V> implements ArtNode<V> {
 
     @Override
     public ArtNode<V> put(long key, int level, V value) {
-        if (requiresBranching(key, level)) {
-            return createBranch(key, value, level);
+        if (level != nodeLevel) {
+            final ArtNode<V> branch = LongAdaptiveRadixTreeMap.branchIfRequired(key, value, nodeKey, nodeLevel, this);
+            if (branch != null) {
+                return branch;
+            }
         }
 
         final short keyByte = (short) ((key >>> nodeLevel) & 0xFF);
@@ -102,5 +105,29 @@ public class ArtNode4<V> implements ArtNode<V> {
             }
         }
         return null;
+    }
+
+    @Override
+    public ObjectsPool getObjectsPool() {
+        return objectsPool;
+    }
+
+    void initTwoKeys(final long key1, final Object value1, final long key2, final Object value2, final int level) {
+        this.numChildren = 2;
+        final short idx1 = (short) ((key1 >> level) & 0xFF);
+        final short idx2 = (short) ((key2 >> level) & 0xFF);
+        if (key1 < key2) {
+            this.keys[0] = idx1;
+            this.nodes[0] = value1;
+            this.keys[1] = idx2;
+            this.nodes[1] = value2;
+        } else {
+            this.keys[0] = idx2;
+            this.nodes[0] = value2;
+            this.keys[1] = idx1;
+            this.nodes[1] = value1;
+        }
+        this.nodeKey = key1; // leading part the same for both keys
+        this.nodeLevel = level;
     }
 }

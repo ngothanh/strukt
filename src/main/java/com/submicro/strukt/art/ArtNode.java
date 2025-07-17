@@ -1,16 +1,12 @@
 package com.submicro.strukt.art;
 
+import com.submicro.strukt.art.pool.ObjectsPool;
+
 public interface ArtNode<V> {
 
     ArtNode<V> put(long key, int level, V value);
 
     V get(long key, int level);
 
-    default boolean requiresBranching(long key, int level) {
-        //TODO
-    }
-
-    default ArtNode<V> createBranch(long key, V value, int level) {
-        //TODO
-    }
+    ObjectsPool getObjectsPool();
 }
