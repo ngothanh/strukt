@@ -50,8 +50,9 @@ public class LongAdaptiveRadixTreeMap<V> {
         }
     }
 
-    static <V> ArtNode<V> branchIfRequired(final long key, final V value, final long nodeKey, final int nodeLevel, final ArtNode<V> caller) {
-
+    static <V> ArtNode<V> branchIfRequired(final long key, final V value, final ArtNode<V> caller) {
+        var nodeKey = caller.getNodeKey();
+        int nodeLevel = caller.getNodeLevel();
         final long keyDiff = key ^ nodeKey;
 
         // check if there is common part

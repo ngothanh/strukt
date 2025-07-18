@@ -1,10 +1,20 @@
 package com.submicro.strukt.art;
 
 import com.submicro.strukt.art.pool.ObjectsPool;
+import lombok.Getter;
 
 public class ArtNode16<V> implements ArtNode<V> {
 
     private final ObjectsPool objectsPool;
+
+    @Getter
+    private long nodeKey;
+
+    @Getter
+    private int nodeLevel;
+
+    @Getter
+    private byte numChildren;
 
     public ArtNode16(ObjectsPool objectsPool) {
         this.objectsPool = objectsPool;

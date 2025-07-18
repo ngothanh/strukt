@@ -1,13 +1,20 @@
 package com.submicro.strukt.art;
 
 import com.submicro.strukt.art.pool.ObjectsPool;
+import lombok.Getter;
 
-public class  ArtNode4<V> implements ArtNode<V> {
+public class ArtNode4<V> implements ArtNode<V> {
 
     final short[] keys = new short[4];
     final Object[] nodes = new Object[4];
+
+    @Getter
     long nodeKey;
+
+    @Getter
     int nodeLevel;
+
+    @Getter
     byte numChildren;
 
     private final ObjectsPool objectsPool;
@@ -27,7 +34,7 @@ public class  ArtNode4<V> implements ArtNode<V> {
     @Override
     public ArtNode<V> put(long key, int level, V value) {
         if (level != nodeLevel) {
-            final ArtNode<V> branch = LongAdaptiveRadixTreeMap.branchIfRequired(key, value, nodeKey, nodeLevel, this);
+            final ArtNode<V> branch = LongAdaptiveRadixTreeMap.branchIfRequired(key, value, this);
             if (branch != null) {
                 return branch;
             }
@@ -137,13 +144,13 @@ public class  ArtNode4<V> implements ArtNode<V> {
 
         // Show current node info
         sb.append(prefix).append("ArtNode4[level=").append(nodeLevel)
-          .append(", key=0x").append(Long.toHexString(nodeKey))
-          .append(", children=").append(numChildren).append("]\n");
+                .append(", key=0x").append(Long.toHexString(nodeKey))
+                .append(", children=").append(numChildren).append("]\n");
 
         // Show each child
         for (int i = 0; i < numChildren; i++) {
             sb.append(prefix).append("├─ key[").append(i).append("]=0x")
-              .append(String.format("%02X", keys[i] & 0xFF));
+                    .append(String.format("%02X", keys[i] & 0xFF));
 
             if (nodeLevel == 0) {
                 // Leaf value
