@@ -47,7 +47,7 @@ class LongAdaptiveRadixTreeMapTest {
         tree.put(0x123456789ABCDE01L, "key2_diff_byte0");
         tree.put(0x123456789ABC1234L, "key3_diff_byte01");
         tree.put(0x12345678FEDCBA98L, "key4_diff_byte0123");
-        
+
         // Verify all keys are accessible
         assertEquals("key1_long_prefix", tree.get(0x123456789ABCDEF0L));
         assertEquals("key2_diff_byte0", tree.get(0x123456789ABCDE01L));
@@ -177,5 +177,160 @@ class LongAdaptiveRadixTreeMapTest {
         assertEquals("byte0_different", tree.get(0xFF00FF00FF00FF01L));
         assertEquals("byte1_different", tree.get(0xFF00FF00FF0000FFL));
         assertEquals("byte2_different", tree.get(0xFF00FF0000FF00FFL));
+    }
+
+    @Test
+    @DisplayName("Demonstrate early exit optimization at intermediate tree levels")
+    void testEarlyExitOptimizationAtIntermediateLevels() {
+        /*
+         * This test creates a complex multi-level tree structure and demonstrates
+         * how the early exit optimization works at intermediate levels, not just at the root.
+         *
+         * We'll build a tree with shared prefixes that forces branching at multiple levels,
+         * then show how the optimization prevents traversal of entire subtrees.
+         */
+
+        // Build a complex tree structure with multiple branching levels
+        // All keys share the prefix 0x1234567800000000 (bytes 7,6,5,4 = 12,34,56,78)
+        // This will create nodes at levels 56, 48, 40, 32 before any branching occurs
+
+        // Group 1: Keys that branch at level 24 (byte 3)
+        tree.put(0x12345678AA000000L, "group1_key1");  // byte 3 = AA
+        tree.put(0x12345678BB000000L, "group1_key2");  // byte 3 = BB
+
+        // Group 2: Keys that branch at level 16 (byte 2)
+        tree.put(0x12345678AA110000L, "group2_key1");  // byte 3 = AA, byte 2 = 11
+        tree.put(0x12345678AA220000L, "group2_key2");  // byte 3 = AA, byte 2 = 22
+
+        // Group 3: Keys that branch at level 8 (byte 1)
+        tree.put(0x12345678AA111100L, "group3_key1");  // bytes 3,2,1 = AA,11,11
+        tree.put(0x12345678AA112200L, "group3_key2");  // bytes 3,2,1 = AA,11,22
+
+        // Group 4: Keys that branch at level 0 (byte 0)
+        tree.put(0x12345678AA111111L, "group4_key1");  // bytes 3,2,1,0 = AA,11,11,11
+        tree.put(0x12345678AA111122L, "group4_key2");  // bytes 3,2,1,0 = AA,11,11,22
+
+        // Verify all keys are accessible
+        assertEquals("group1_key1", tree.get(0x12345678AA000000L));
+        assertEquals("group1_key2", tree.get(0x12345678BB000000L));
+        assertEquals("group2_key1", tree.get(0x12345678AA110000L));
+        assertEquals("group2_key2", tree.get(0x12345678AA220000L));
+        assertEquals("group3_key1", tree.get(0x12345678AA111100L));
+        assertEquals("group3_key2", tree.get(0x12345678AA112200L));
+        assertEquals("group4_key1", tree.get(0x12345678AA111111L));
+        assertEquals("group4_key2", tree.get(0x12345678AA111122L));
+
+        /*
+         * Now test the optimization at different intermediate levels:
+         *
+         * Test Case 1: Search for key that differs at byte 3 (level 24)
+         * Search key: 0x12345678CC111111 (byte 3 = CC, but tree only has AA and BB)
+         *
+         * Tree structure:
+         * - Root at level 56 (shared prefix 0x1234567800000000)
+         * - Child nodes at level 24 handling byte 3 (AA branch vs BB branch)
+         * - When searching the AA subtree with nodeLevel=16, the condition triggers:
+         *   level=24, nodeLevel=16 (level != nodeLevel ✓)
+         *   key ^ nodeKey = 0x12345678CC111111 ^ 0x12345678AA111111 = 0x0000000066000000
+         *   mask = (-1L << (16 + 8)) = 0xFFFFFFFFFF000000
+         *   (0x0000000066000000 & 0xFFFFFFFFFF000000) = 0x0000000066000000 ≠ 0 ✓
+         *
+         *   This detects that the keys differ in byte 3 (above level 16+8=24),
+         *   so the entire AA subtree can be skipped!
+         */
+        assertNull(tree.get(0x12345678CC111111L));
+
+        /*
+         * Test Case 2: Search for key that differs at byte 2 (level 16)
+         * Search key: 0x12345678AA331111 (follows AA branch but byte 2 = 33)
+         *
+         * This will:
+         * 1. Successfully traverse to the AA subtree at level 24
+         * 2. At level 16 nodes (handling byte 2), find branches for 11 and 22
+         * 3. When checking the 11-branch subtree with nodeLevel=8:
+         *    level=16, nodeLevel=8 (level != nodeLevel ✓)
+         *    key ^ nodeKey = 0x12345678AA331111 ^ 0x12345678AA111111 = 0x0000000000220000
+         *    mask = (-1L << (8 + 8)) = 0xFFFFFFFFFFFF0000
+         *    (0x0000000000220000 & 0xFFFFFFFFFFFF0000) = 0x0000000000220000 ≠ 0 ✓
+         *
+         *    This detects the difference in byte 2, avoiding traversal of the 11-subtree
+         */
+        assertNull(tree.get(0x12345678AA331111L));
+
+        /*
+         * Test Case 3: Search for key that differs at byte 1 (level 8)
+         * Search key: 0x12345678AA113311 (follows AA->11 path but byte 1 = 33)
+         *
+         * This will:
+         * 1. Successfully traverse AA subtree (level 24)
+         * 2. Successfully traverse 11 subtree (level 16)
+         * 3. At level 8 nodes, find branches for byte 1 values 11 and 22
+         * 4. When checking the 11-branch subtree with nodeLevel=0:
+         *    level=8, nodeLevel=0 (level != nodeLevel ✓)
+         *    key ^ nodeKey = 0x12345678AA113311 ^ 0x12345678AA111111 = 0x0000000000002200
+         *    mask = (-1L << (0 + 8)) = 0xFFFFFFFFFFFFFF00
+         *    (0x0000000000002200 & 0xFFFFFFFFFFFFFF00) = 0x0000000000002200 ≠ 0 ✓
+         *
+         *    This detects the difference in byte 1, avoiding leaf-level comparison
+         */
+        assertNull(tree.get(0x12345678AA113311L));
+
+        /*
+         * Test Case 4: Key that only differs in byte 0 (no early exit possible)
+         * Search key: 0x12345678AA111133 (follows full path but byte 0 = 33)
+         *
+         * This will traverse the entire path:
+         * AA subtree -> 11 subtree -> 11 subtree -> leaf comparison
+         * Only fails at the final leaf comparison since all intermediate
+         * levels match perfectly.
+         */
+        assertNull(tree.get(0x12345678AA111133L));
+    }
+
+    @Test
+    @DisplayName("Test early termination in sorted key search")
+    void testEarlyTerminationInSortedKeySearch() {
+        /*
+         * This test verifies that the linear search in ArtNode4 can terminate early
+         * when the search key is smaller than the current key being examined,
+         * since keys are stored in sorted order.
+         */
+
+        // Insert keys that will create a node with multiple children in sorted order
+        // All keys share prefix 0x1234567800000000, differing only in byte 0
+        tree.put(0x1234567800000010L, "key_10");  // byte 0 = 0x10
+        tree.put(0x1234567800000030L, "key_30");  // byte 0 = 0x30
+        tree.put(0x1234567800000050L, "key_50");  // byte 0 = 0x50
+        tree.put(0x1234567800000070L, "key_70");  // byte 0 = 0x70
+
+        // Verify all keys are accessible
+        assertEquals("key_10", tree.get(0x1234567800000010L));
+        assertEquals("key_30", tree.get(0x1234567800000030L));
+        assertEquals("key_50", tree.get(0x1234567800000050L));
+        assertEquals("key_70", tree.get(0x1234567800000070L));
+
+        /*
+         * Test early termination scenarios:
+         *
+         * When searching for 0x1234567800000025 (byte 0 = 0x25):
+         * - Check key[0] = 0x10: 0x25 > 0x10, continue
+         * - Check key[1] = 0x30: 0x25 < 0x30, BREAK (early termination)
+         * - Never checks key[2] = 0x50 or key[3] = 0x70
+         *
+         * This demonstrates the optimization where we don't need to check
+         * all children when we know the search key is smaller than remaining keys.
+         */
+        assertNull(tree.get(0x1234567800000025L)); // Between 0x10 and 0x30
+        assertNull(tree.get(0x1234567800000045L)); // Between 0x30 and 0x50
+        assertNull(tree.get(0x1234567800000065L)); // Between 0x50 and 0x70
+        assertNull(tree.get(0x1234567800000005L)); // Smaller than 0x10
+        assertNull(tree.get(0x1234567800000080L)); // Larger than 0x70
+
+        /*
+         * Edge cases that should still work correctly:
+         */
+        assertNull(tree.get(0x123456780000000FL)); // Just before first key
+        assertNull(tree.get(0x1234567800000011L)); // Just after first key
+        assertNull(tree.get(0x1234567800000071L)); // Just after last key
     }
 }

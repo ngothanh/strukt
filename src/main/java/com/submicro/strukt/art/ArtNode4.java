@@ -92,14 +92,14 @@ public class  ArtNode4<V> implements ArtNode<V> {
         }
         final short keyByte = (short) ((key >>> nodeLevel) & 0xFF);
         for (int i = 0; i < numChildren; i++) {
-            final short index = keys[i];
-            if (index == keyByte) {
+            final short branchByte = keys[i];
+            if (branchByte == keyByte) {
                 final Object node = nodes[i];
                 return nodeLevel == 0
                         ? (V) node
                         : ((ArtNode<V>) node).get(key, nodeLevel - 8);
             }
-            if (keyByte < index) {
+            if (keyByte < branchByte) {
                 // can give up searching because keys are in sorted order
                 break;
             }
