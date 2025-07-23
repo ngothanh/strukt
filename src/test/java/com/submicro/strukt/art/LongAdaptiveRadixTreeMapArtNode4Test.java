@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Each test focuses on complex scenarios with keys that differ in multiple bytes (4-5 byte differences)
  * and trigger branching at various levels to demonstrate ArtNode4's internal behavior.
  */
-class LongAdaptiveRadixTreeMapTest {
+class LongAdaptiveRadixTreeMapArtNode4Test {
 
     private LongAdaptiveRadixTreeMap<String> tree;
 
