@@ -2,6 +2,8 @@ package com.submicro.strukt.art;
 
 import com.submicro.strukt.art.pool.ObjectsPool;
 
+import java.util.Arrays;
+
 public class ArtNode16<V> implements ArtNode<V> {
 
     private final ObjectsPool objectsPool;
@@ -138,7 +140,8 @@ public class ArtNode16<V> implements ArtNode<V> {
 
     @Override
     public void recycle() {
-
+        Arrays.fill(nodes, null);
+        objectsPool.put(ObjectsPool.ART_NODE_16, this);
     }
 
     public void initFromNode4(ArtNode4<V> node4, short subKey, Object newElement) {
