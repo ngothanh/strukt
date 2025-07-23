@@ -59,6 +59,10 @@ public class ObjectsPool {
         }
     }
 
+    public void put(final int type, Object object) {
+        pools[type].add(object);
+    }
+
     private final static class ArrayStack {
         private int size = 0;
         private final Object[] elements;

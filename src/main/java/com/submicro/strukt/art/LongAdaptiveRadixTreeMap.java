@@ -50,9 +50,13 @@ public class LongAdaptiveRadixTreeMap<V> {
         }
     }
 
-    static <V> ArtNode<V> branchIfRequired(final long key, final V value, final ArtNode<V> caller) {
-        var nodeKey = caller.getNodeKey();
-        int nodeLevel = caller.getNodeLevel();
+    static <V> ArtNode<V> branchIfRequired(
+            final long key,
+            final V value,
+            final ArtNode<V> node,
+            long nodeKey,
+            int nodeLevel
+    ) {
         final long keyDiff = key ^ nodeKey;
 
         // check if there is common part
@@ -66,12 +70,12 @@ public class LongAdaptiveRadixTreeMap<V> {
             return null;
         }
 
-        final ObjectsPool objectsPool = caller.getObjectsPool();
+        final ObjectsPool objectsPool = node.getObjectsPool();
         final ArtNode4<V> newSubNode = objectsPool.get(ObjectsPool.ART_NODE_4, ArtNode4::new);
         newSubNode.initFirstKey(key, value);
 
         final ArtNode4<V> newNode = objectsPool.get(ObjectsPool.ART_NODE_4, ArtNode4::new);
-        newNode.initTwoKeys(nodeKey, caller, key, newSubNode, newLevel);
+        newNode.initTwoKeys(nodeKey, node, key, newSubNode, newLevel);
 
         return newNode;
     }

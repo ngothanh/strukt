@@ -1,20 +1,18 @@
 package com.submicro.strukt.art;
 
 import com.submicro.strukt.art.pool.ObjectsPool;
-import lombok.Getter;
+
+import java.util.Arrays;
 
 public class ArtNode4<V> implements ArtNode<V> {
 
     final short[] keys = new short[4];
     final Object[] nodes = new Object[4];
 
-    @Getter
     long nodeKey;
 
-    @Getter
     int nodeLevel;
 
-    @Getter
     byte numChildren;
 
     private final ObjectsPool objectsPool;
@@ -34,7 +32,7 @@ public class ArtNode4<V> implements ArtNode<V> {
     @Override
     public ArtNode<V> put(long key, int level, V value) {
         if (level != nodeLevel) {
-            final ArtNode<V> branch = LongAdaptiveRadixTreeMap.branchIfRequired(key, value, this);
+            final ArtNode<V> branch = LongAdaptiveRadixTreeMap.branchIfRequired(key, value, this, nodeKey, nodeLevel);
             if (branch != null) {
                 return branch;
             }
@@ -107,7 +105,6 @@ public class ArtNode4<V> implements ArtNode<V> {
                         : ((ArtNode<V>) node).get(key, nodeLevel - 8);
             }
             if (keyByte < branchByte) {
-                // can give up searching because keys are in sorted order
                 break;
             }
         }
@@ -117,6 +114,36 @@ public class ArtNode4<V> implements ArtNode<V> {
     @Override
     public ObjectsPool getObjectsPool() {
         return objectsPool;
+    }
+
+    @Override
+    public String printDiagram(String prefix, int level) {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append(prefix).append("ArtNode4[level=").append(nodeLevel)
+                .append(", key=0x").append(Long.toHexString(nodeKey))
+                .append(", children=").append(numChildren).append("]\n");
+
+        for (int i = 0; i < numChildren; i++) {
+            sb.append(prefix).append("├─ key[").append(i).append("]=0x")
+                    .append(String.format("%02X", keys[i] & 0xFF));
+
+            if (nodeLevel == 0) {
+                sb.append(" → ").append(nodes[i]).append("\n");
+            } else {
+                sb.append("\n");
+                String childPrefix = prefix + "│  ";
+                sb.append(((ArtNode<V>) nodes[i]).printDiagram(childPrefix, nodeLevel - 8));
+            }
+        }
+
+        return sb.toString();
+    }
+
+    @Override
+    public void recycle() {
+        Arrays.fill(nodes, null);
+        objectsPool.put(ObjectsPool.ART_NODE_4, this);
     }
 
     void initTwoKeys(final long key1, final Object value1, final long key2, final Object value2, final int level) {
@@ -134,35 +161,7 @@ public class ArtNode4<V> implements ArtNode<V> {
             this.keys[1] = idx1;
             this.nodes[1] = value1;
         }
-        this.nodeKey = key1; // leading part the same for both keys
+        this.nodeKey = key1;
         this.nodeLevel = level;
-    }
-
-    @Override
-    public String printDiagram(String prefix, int level) {
-        StringBuilder sb = new StringBuilder();
-
-        // Show current node info
-        sb.append(prefix).append("ArtNode4[level=").append(nodeLevel)
-                .append(", key=0x").append(Long.toHexString(nodeKey))
-                .append(", children=").append(numChildren).append("]\n");
-
-        // Show each child
-        for (int i = 0; i < numChildren; i++) {
-            sb.append(prefix).append("├─ key[").append(i).append("]=0x")
-                    .append(String.format("%02X", keys[i] & 0xFF));
-
-            if (nodeLevel == 0) {
-                // Leaf value
-                sb.append(" → ").append(nodes[i]).append("\n");
-            } else {
-                // Child node
-                sb.append("\n");
-                String childPrefix = prefix + "│  ";
-                sb.append(((ArtNode<V>) nodes[i]).printDiagram(childPrefix, nodeLevel - 8));
-            }
-        }
-
-        return sb.toString();
     }
 }
