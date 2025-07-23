@@ -34,7 +34,6 @@ public class ArtNode16<V> implements ArtNode<V> {
         int pos = 0;
         while (pos < numChildren) {
             if (nodeIndex == keys[pos]) {
-                // just update
                 if (nodeLevel == 0) {
                     nodes[pos] = value;
                 } else {
