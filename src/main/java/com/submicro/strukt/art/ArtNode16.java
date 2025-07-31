@@ -1,13 +1,11 @@
 package com.submicro.strukt.art;
 
 import com.submicro.strukt.art.pool.ObjectsPool;
-import lombok.Getter;
 
 import java.util.Arrays;
 
 public class ArtNode16<V> implements ArtNode<V> {
 
-    @Getter
     private final ObjectsPool objectsPool;
 
     long nodeKey;
@@ -108,6 +106,11 @@ public class ArtNode16<V> implements ArtNode<V> {
             }
         }
         return null;
+    }
+
+    @Override
+    public ObjectsPool getObjectsPool() {
+        return objectsPool;
     }
 
     @Override
