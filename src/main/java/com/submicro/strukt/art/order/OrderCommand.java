@@ -4,6 +4,8 @@ public class OrderCommand {
 
     public long id;
 
+    public long orderId;
+
     public int symbol;
 
     public long price;
@@ -15,4 +17,6 @@ public class OrderCommand {
     public long uid;
 
     public long timestamp;
+
+    public long reserveBidPrice;
 }

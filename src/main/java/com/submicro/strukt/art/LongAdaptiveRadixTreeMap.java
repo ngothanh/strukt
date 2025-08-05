@@ -35,11 +35,10 @@ public class LongAdaptiveRadixTreeMap<V> {
 
             final ArtNode<V> upSizedNode = root.put(key, INITIAL_LEVEL, value);
             if (upSizedNode != null) {
-                // TODO put old into the pool
                 root = upSizedNode;
             }
         }
-        log.debug(printDiagram());
+        // log.debug(printDiagram()); // Commented out for now
     }
 
     public String printDiagram() {

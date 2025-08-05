@@ -16,6 +16,17 @@ public class Order {
 
     public OrderAction action;
 
+
+    public Order(long id, long price, long size, long filled, OrderAction action, long uid, long timestamp) {
+        this.id = id;
+        this.price = price;
+        this.size = size;
+        this.filled = filled;
+        this.action = action;
+        this.uid = uid;
+        this.timestamp = timestamp;
+    }
+
     public long availableAmount() {
         return size - filled;
     }

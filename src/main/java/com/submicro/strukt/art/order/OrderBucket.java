@@ -3,6 +3,7 @@ package com.submicro.strukt.art.order;
 import lombok.Getter;
 
 import java.util.LinkedHashMap;
+import java.util.Collection;
 
 public class OrderBucket {
 
@@ -12,7 +13,7 @@ public class OrderBucket {
     private final LinkedHashMap<Long, Order> entries;
 
     @Getter
-    private long totalVolume;
+    long totalVolume; // package-private for direct access from TreeSetOrderBook
 
     public OrderBucket(final long price) {
         this.price = price;
@@ -32,5 +33,13 @@ public class OrderBucket {
         }
         entries.remove(order.id);
         totalVolume -= entry.availableAmount();
+    }
+
+    public Collection<Order> getOrders() {
+        return entries.values();
+    }
+
+    public boolean isEmpty() {
+        return entries.isEmpty();
     }
 }
