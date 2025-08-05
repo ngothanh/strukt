@@ -1,7 +1,5 @@
 package com.submicro.strukt.art.order;
 
-import lombok.Getter;
-
 public class Order {
 
     public long id;
@@ -15,6 +13,8 @@ public class Order {
     public long uid;
 
     public long timestamp;
+
+    public OrderAction action;
 
     public long availableAmount() {
         return size - filled;
