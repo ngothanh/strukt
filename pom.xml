@@ -36,7 +36,7 @@
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.4.11</version>
+            <version>1.5.13</version>
         </dependency>
         <dependency>
             <groupId>org.eclipse.collections</groupId>
@@ -103,22 +103,6 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven.surefire.version}</version>
-            </plugin>
-
-            <plugin>
-                <groupId>org.openjdk.jmh</groupId>
-                <artifactId>jmh-maven-plugin</artifactId>
-                <version>1.37</version>
-                <executions>
-                    <execution>
-                        <id>benchmark</id>
-                        <phase>test</phase>
-                        <goals>
-                            <goal>generate</goal>
-                            <goal>compile</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
         </plugins>
     </build>
