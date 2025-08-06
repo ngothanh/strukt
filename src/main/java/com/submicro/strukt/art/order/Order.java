@@ -16,6 +16,16 @@ public class Order {
 
     public OrderAction action;
 
+    OrderBucket parent;
+
+    // next order (towards the matching direction, price grows for asks)
+    Order next;
+
+    // previous order (to the tail of the queue, lower priority and worst price, towards the matching direction)
+    Order prev;
+
+    public Order() {
+    }
 
     public Order(long id, long price, long size, long filled, OrderAction action, long uid, long timestamp) {
         this.id = id;
