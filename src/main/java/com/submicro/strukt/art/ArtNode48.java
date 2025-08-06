@@ -120,8 +120,6 @@ public class ArtNode48<V> implements ArtNode<V> {
             final ArtNode<V> node = (ArtNode<V>) nodes[nodeIndex];
             final ArtNode<V> resizedNode = node.remove(key, nodeLevel - 8);
             if (resizedNode != node) {
-                // TODO put old into the pool
-                // update resized node if capacity has decreased
                 nodes[nodeIndex] = resizedNode;
                 if (resizedNode == null) {
                     numChildren--;

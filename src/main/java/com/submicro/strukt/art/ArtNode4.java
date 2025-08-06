@@ -139,8 +139,6 @@ public class ArtNode4<V> implements ArtNode<V> {
         } else {
             final ArtNode<V> resizedNode = ((ArtNode<V>) node).remove(key, nodeLevel - 8);
             if (resizedNode != node) {
-                // TODO put old into the pool
-                // update resized node if capacity has decreased
                 nodes[pos] = resizedNode;
                 if (resizedNode == null) {
                     removeElementAtPos(pos);

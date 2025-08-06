@@ -85,8 +85,6 @@ public class ArtNode256<V> implements ArtNode<V> {
             final ArtNode<V> node = (ArtNode<V>) nodes[idx];
             final ArtNode<V> resizedNode = node.remove(key, nodeLevel - 8);
             if (resizedNode != node) {
-                // TODO put old into the pool
-                // update resized node if capacity has decreased
                 nodes[idx] = resizedNode;
                 if (resizedNode == null) {
                     numChildren--;
