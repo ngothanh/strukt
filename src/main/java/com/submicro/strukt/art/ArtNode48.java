@@ -14,23 +14,23 @@ public class ArtNode48<V> implements ArtNode<V> {
 
     byte numChildren;
 
-    final byte[] indexes = new byte[48];
-    final Object[] nodes = new Object[48];
-    private long freeBitMask;
+    final byte[] indexes = new byte[256];  // Must be 256 to handle all possible byte values
+    final Object[] nodes = new Object[48]; // Only 48 actual storage slots
+    long freeBitMask; // Package-private for testing
 
     public ArtNode48(ObjectsPool objectsPool) {
         this.objectsPool = objectsPool;
     }
 
     @Override
-    public ArtNode<V> put(long key, int level, V value) {
+    @SuppressWarnings("unchecked")
+    public ArtNode<V> put(final long key, final int level, final V value) {
         if (level != nodeLevel) {
             final ArtNode<V> branch = LongAdaptiveRadixTreeMap.branchIfRequired(key, value, this, nodeKey, nodeLevel);
             if (branch != null) {
                 return branch;
             }
         }
-
         final short idx = (short) ((key >>> nodeLevel) & 0xFF);
         final byte nodeIndex = indexes[idx];
         if (nodeIndex != -1) {
@@ -46,7 +46,10 @@ public class ArtNode48<V> implements ArtNode<V> {
             return null;
         }
 
+        // not found, put new element
+
         if (numChildren != 48) {
+            // capacity less than 48 - can simply insert node
             final byte freePosition = (byte) Long.numberOfTrailingZeros(~freeBitMask);
             indexes[idx] = freePosition;
 
@@ -84,7 +87,7 @@ public class ArtNode48<V> implements ArtNode<V> {
         if (level != nodeLevel && ((key ^ nodeKey) & (-1L << (nodeLevel + 8))) != 0) {
             return null;
         }
-        final short idx = (short) ((key >>> nodeLevel) & 0xFF);
+        final int idx = (int) ((key >>> nodeLevel) & 0xFF);
         final byte nodeIndex = indexes[idx];
         if (nodeIndex != -1) {
             final Object node = nodes[nodeIndex];
@@ -101,7 +104,7 @@ public class ArtNode48<V> implements ArtNode<V> {
             return this; // Key not found, return unchanged
         }
 
-        final short idx = (short) ((key >>> nodeLevel) & 0xFF);
+        final int idx = (int) ((key >>> nodeLevel) & 0xFF);
         final byte nodeIndex = indexes[idx];
         if (nodeIndex != -1) {
             if (nodeLevel == 0) {
@@ -141,24 +144,12 @@ public class ArtNode48<V> implements ArtNode<V> {
         return this; // Key not found, return unchanged
     }
 
-    private void removeChildAt(short idx, byte nodeIndex) {
+    private void removeChildAt(int idx, byte nodeIndex) {
         // Remove the mapping
         indexes[idx] = -1;
         nodes[nodeIndex] = null;
         numChildren--;
-
-        // Compact the nodes array by moving the last element to fill the gap
-        if (nodeIndex < numChildren) {
-            // Find the index that points to the last element
-            for (short i = 0; i < 256; i++) {
-                if (indexes[i] == numChildren) {
-                    indexes[i] = nodeIndex;
-                    break;
-                }
-            }
-            nodes[nodeIndex] = nodes[numChildren];
-            nodes[numChildren] = null;
-        }
+        freeBitMask ^= (1L << nodeIndex); // mark as free
     }
 
     @Override
@@ -179,19 +170,19 @@ public class ArtNode48<V> implements ArtNode<V> {
     }
 
 
-    public void initFromNode16(ArtNode16<V> node16, short keyByte, Object newElement) {
+    public void initFromNode16(ArtNode16<V> node16, int keyByte, Object newElement) {
         final byte sourceSize = 16;
-        Arrays.fill(this.indexes, (byte) -1);
+        Arrays.fill(this.indexes, (byte) -1);  // Initialize all 256 indexes to -1
         this.numChildren = sourceSize + 1;
         this.nodeLevel = node16.nodeLevel;
         this.nodeKey = node16.nodeKey;
 
         for (byte i = 0; i < sourceSize; i++) {
-            this.indexes[node16.keys[i]] = i;
+            this.indexes[node16.keys[i] & 0xFF] = i;  // Ensure proper indexing
             this.nodes[i] = node16.nodes[i];
         }
 
-        this.indexes[keyByte] = sourceSize;
+        this.indexes[keyByte & 0xFF] = sourceSize;  // Ensure proper indexing
         this.nodes[sourceSize] = newElement;
         this.freeBitMask = (1L << (sourceSize + 1)) - 1;
 
@@ -204,7 +195,7 @@ public class ArtNode48<V> implements ArtNode<V> {
         this.nodeKey = node256.nodeKey;
         this.numChildren = (byte) node256.numChildren;
 
-        // Initialize indexes to -1
+        // Initialize all 256 indexes to -1
         Arrays.fill(indexes, (byte) -1);
 
         // Copy non-null entries from node256
