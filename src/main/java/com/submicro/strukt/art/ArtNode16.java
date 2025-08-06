@@ -6,6 +6,8 @@ import java.util.Arrays;
 
 public class ArtNode16<V> implements ArtNode<V> {
 
+    private static final int NODE4_SWITCH_THRESHOLD = 3;
+
     private final ObjectsPool objectsPool;
 
     long nodeKey;
@@ -109,66 +111,65 @@ public class ArtNode16<V> implements ArtNode<V> {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public ArtNode<V> remove(long key, int level) {
         if (level != nodeLevel && ((key ^ nodeKey) & (-1L << (nodeLevel + 8))) != 0) {
-            return this; // Key not found, return unchanged
+            return this;
+        }
+        final short nodeIndex = (short) ((key >>> nodeLevel) & 0xFF);
+        Object node = null;
+        int pos = 0;
+        while (pos < numChildren) {
+            if (nodeIndex == keys[pos]) {
+                // found
+                node = nodes[pos];
+                break;
+            }
+            if (nodeIndex < keys[pos]) {
+                // can give up searching because keys are in sorted order
+                return this;
+            }
+            pos++;
         }
 
-        final short keyByte = (short) ((key >>> nodeLevel) & 0xFF);
-        for (int i = 0; i < numChildren; i++) {
-            final short branchByte = keys[i];
-            if (branchByte == keyByte) {
-                if (nodeLevel == 0) {
-                    // Leaf level - remove this entry
-                    removeChildAt(i);
+        if (node == null) {
+            // not found
+            return this;
+        }
 
-                    // Check if we should shrink to ArtNode4
-                    if (numChildren <= 4) {
-                        ArtNode4<V> node4 = objectsPool.get(ObjectsPool.ART_NODE_4, ArtNode4::new);
-                        node4.initFromNode16(this);
-                        return node4;
-                    }
-                    return numChildren == 0 ? null : this;
-                } else {
-                    // Internal node - recurse
-                    ArtNode<V> childNode = (ArtNode<V>) nodes[i];
-                    ArtNode<V> newChild = childNode.remove(key, nodeLevel - 8);
-
-                    if (newChild == null) {
-                        // Child was removed completely
-                        removeChildAt(i);
-
-                        // Check if we should shrink to ArtNode4
-                        if (numChildren <= 4) {
-                            ArtNode4<V> node4 = objectsPool.get(ObjectsPool.ART_NODE_4, ArtNode4::new);
-                            node4.initFromNode16(this);
-                            return node4;
-                        }
-                        return numChildren == 0 ? null : this;
-                    } else if (newChild != childNode) {
-                        // Child was replaced
-                        nodes[i] = newChild;
-                    }
-                    return this;
+        // removing
+        if (nodeLevel == 0) {
+            removeElementAtPos(pos);
+        } else {
+            final ArtNode<V> resizedNode = ((ArtNode<V>) node).remove(key, nodeLevel - 8);
+            if (resizedNode != node) {
+                // update resized node if capacity has decreased
+                nodes[pos] = resizedNode;
+                if (resizedNode == null) {
+                    removeElementAtPos(pos);
                 }
             }
-            if (keyByte < branchByte) {
-                break; // Key not found
-            }
         }
-        return this; // Key not found, return unchanged
+
+        // switch to ArtNode4 if too small
+        if (numChildren == NODE4_SWITCH_THRESHOLD) {
+            final ArtNode4<V> newNode = objectsPool.get(ObjectsPool.ART_NODE_4, ArtNode4::new);
+            newNode.initFromNode16(this);
+            return newNode;
+        } else {
+            return this;
+        }
     }
 
-    private void removeChildAt(int index) {
-        // Shift elements left to fill the gap
-        for (int i = index; i < numChildren - 1; i++) {
-            keys[i] = keys[i + 1];
-            nodes[i] = nodes[i + 1];
+    private void removeElementAtPos(final int pos) {
+        final int ppos = pos + 1;
+        final int copyLength = numChildren - ppos;
+        if (copyLength != 0) {
+            System.arraycopy(keys, ppos, keys, pos, copyLength);
+            System.arraycopy(nodes, ppos, nodes, pos, copyLength);
         }
-        // Clear the last element
-        keys[numChildren - 1] = 0;
-        nodes[numChildren - 1] = null;
         numChildren--;
+        nodes[numChildren] = null;
     }
 
     @Override

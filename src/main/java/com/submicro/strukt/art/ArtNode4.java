@@ -114,50 +114,63 @@ public class ArtNode4<V> implements ArtNode<V> {
     @Override
     public ArtNode<V> remove(long key, int level) {
         if (level != nodeLevel && ((key ^ nodeKey) & (-1L << (nodeLevel + 8))) != 0) {
-            return this; // Key not found, return unchanged
+            return this;
+        }
+        final short nodeIndex = (short) ((key >>> nodeLevel) & 0xFF);
+        Object node = null;
+        int pos = 0;
+        while (pos < numChildren) {
+            if (nodeIndex == keys[pos]) {
+                // found
+                node = nodes[pos];
+                break;
+            }
+            pos++;
         }
 
-        final short keyByte = (short) ((key >>> nodeLevel) & 0xFF);
-        for (int i = 0; i < numChildren; i++) {
-            final short branchByte = keys[i];
-            if (branchByte == keyByte) {
-                if (nodeLevel == 0) {
-                    // Leaf level - remove this entry
-                    removeChildAt(i);
-                    return numChildren == 0 ? null : this;
-                } else {
-                    // Internal node - recurse
-                    ArtNode<V> childNode = (ArtNode<V>) nodes[i];
-                    ArtNode<V> newChild = childNode.remove(key, nodeLevel - 8);
+        if (node == null) {
+            // not found
+            return this;
+        }
 
-                    if (newChild == null) {
-                        // Child was removed completely
-                        removeChildAt(i);
-                        return numChildren == 0 ? null : this;
-                    } else if (newChild != childNode) {
-                        // Child was replaced
-                        nodes[i] = newChild;
+        // removing
+        if (nodeLevel == 0) {
+            removeElementAtPos(pos);
+        } else {
+            final ArtNode<V> resizedNode = ((ArtNode<V>) node).remove(key, nodeLevel - 8);
+            if (resizedNode != node) {
+                // TODO put old into the pool
+                // update resized node if capacity has decreased
+                nodes[pos] = resizedNode;
+                if (resizedNode == null) {
+                    removeElementAtPos(pos);
+                    if (numChildren == 1) {
+                        ArtNode<V> lastNode = (ArtNode<V>) nodes[0];
+                        return lastNode;
                     }
-                    return this;
                 }
             }
-            if (keyByte < branchByte) {
-                break; // Key not found
-            }
         }
-        return this; // Key not found, return unchanged
+
+        if (numChildren == 0) {
+            // indicate if removed last one
+            Arrays.fill(nodes, null);
+            objectsPool.put(ObjectsPool.ART_NODE_4, this);
+            return null;
+        } else {
+            return this;
+        }
     }
 
-    private void removeChildAt(int index) {
-        // Shift elements left to fill the gap
-        for (int i = index; i < numChildren - 1; i++) {
-            keys[i] = keys[i + 1];
-            nodes[i] = nodes[i + 1];
+    private void removeElementAtPos(final int pos) {
+        final int ppos = pos + 1;
+        final int copyLength = numChildren - ppos;
+        if (copyLength != 0) {
+            System.arraycopy(keys, ppos, keys, pos, copyLength);
+            System.arraycopy(nodes, ppos, nodes, pos, copyLength);
         }
-        // Clear the last element
-        keys[numChildren - 1] = 0;
-        nodes[numChildren - 1] = null;
         numChildren--;
+        nodes[numChildren] = null;
     }
 
     @Override

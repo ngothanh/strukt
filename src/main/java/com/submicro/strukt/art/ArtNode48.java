@@ -5,6 +5,7 @@ import com.submicro.strukt.art.pool.ObjectsPool;
 import java.util.Arrays;
 
 public class ArtNode48<V> implements ArtNode<V> {
+    private static final int NODE16_SWITCH_THRESHOLD = 12;
 
     private final ObjectsPool objectsPool;
 
@@ -99,57 +100,44 @@ public class ArtNode48<V> implements ArtNode<V> {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public ArtNode<V> remove(long key, int level) {
         if (level != nodeLevel && ((key ^ nodeKey) & (-1L << (nodeLevel + 8))) != 0) {
-            return this; // Key not found, return unchanged
+            return this;
+        }
+        final short idx = (short) ((key >>> nodeLevel) & 0xFF);
+        final byte nodeIndex = indexes[idx];
+        if (nodeIndex == -1) {
+            return this;
         }
 
-        final int idx = (int) ((key >>> nodeLevel) & 0xFF);
-        final byte nodeIndex = indexes[idx];
-        if (nodeIndex != -1) {
-            if (nodeLevel == 0) {
-                // Leaf level - remove this entry
-                removeChildAt(idx, nodeIndex);
-
-                // Check if we should shrink to ArtNode16
-                if (numChildren <= 16) {
-                    ArtNode16<V> node16 = objectsPool.get(ObjectsPool.ART_NODE_16, ArtNode16::new);
-                    node16.initFromNode48(this);
-                    return node16;
+        if (nodeLevel == 0) {
+            nodes[nodeIndex] = null;
+            indexes[idx] = -1;
+            numChildren--;
+            freeBitMask = freeBitMask ^ (1L << nodeIndex);
+        } else {
+            final ArtNode<V> node = (ArtNode<V>) nodes[nodeIndex];
+            final ArtNode<V> resizedNode = node.remove(key, nodeLevel - 8);
+            if (resizedNode != node) {
+                // TODO put old into the pool
+                // update resized node if capacity has decreased
+                nodes[nodeIndex] = resizedNode;
+                if (resizedNode == null) {
+                    numChildren--;
+                    indexes[idx] = -1;
+                    freeBitMask = freeBitMask ^ (1L << nodeIndex);
                 }
-                return numChildren == 0 ? null : this;
-            } else {
-                // Internal node - recurse
-                ArtNode<V> childNode = (ArtNode<V>) nodes[nodeIndex];
-                ArtNode<V> newChild = childNode.remove(key, nodeLevel - 8);
-
-                if (newChild == null) {
-                    // Child was removed completely
-                    removeChildAt(idx, nodeIndex);
-
-                    // Check if we should shrink to ArtNode16
-                    if (numChildren <= 16) {
-                        ArtNode16<V> node16 = objectsPool.get(ObjectsPool.ART_NODE_16, ArtNode16::new);
-                        node16.initFromNode48(this);
-                        return node16;
-                    }
-                    return numChildren == 0 ? null : this;
-                } else if (newChild != childNode) {
-                    // Child was replaced
-                    nodes[nodeIndex] = newChild;
-                }
-                return this;
             }
         }
-        return this; // Key not found, return unchanged
-    }
 
-    private void removeChildAt(int idx, byte nodeIndex) {
-        // Remove the mapping
-        indexes[idx] = -1;
-        nodes[nodeIndex] = null;
-        numChildren--;
-        freeBitMask ^= (1L << nodeIndex); // mark as free
+        if (numChildren == NODE16_SWITCH_THRESHOLD) {
+            final ArtNode16<V> newNode = objectsPool.get(ObjectsPool.ART_NODE_16, ArtNode16::new);
+            newNode.initFromNode48(this);
+            return newNode;
+        } else {
+            return this;
+        }
     }
 
     @Override
