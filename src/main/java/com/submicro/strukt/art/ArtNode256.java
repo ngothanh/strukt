@@ -68,6 +68,54 @@ public class ArtNode256<V> implements ArtNode<V> {
     }
 
     @Override
+    public ArtNode<V> remove(long key, int level) {
+        if (level != nodeLevel && ((key ^ nodeKey) & (-1L << (nodeLevel + 8))) != 0) {
+            return this; // Key not found, return unchanged
+        }
+
+        final short idx = (short) ((key >>> nodeLevel) & 0xFF);
+        final Object node = nodes[idx];
+        if (node != null) {
+            if (nodeLevel == 0) {
+                // Leaf level - remove this entry
+                nodes[idx] = null;
+                numChildren--;
+
+                // Check if we should shrink to ArtNode48
+                if (numChildren <= 48) {
+                    ArtNode48<V> node48 = objectsPool.get(ObjectsPool.ART_NODE_48, ArtNode48::new);
+                    node48.initFromNode256(this);
+                    return node48;
+                }
+                return numChildren == 0 ? null : this;
+            } else {
+                // Internal node - recurse
+                ArtNode<V> childNode = (ArtNode<V>) node;
+                ArtNode<V> newChild = childNode.remove(key, nodeLevel - 8);
+
+                if (newChild == null) {
+                    // Child was removed completely
+                    nodes[idx] = null;
+                    numChildren--;
+
+                    // Check if we should shrink to ArtNode48
+                    if (numChildren <= 48) {
+                        ArtNode48<V> node48 = objectsPool.get(ObjectsPool.ART_NODE_48, ArtNode48::new);
+                        node48.initFromNode256(this);
+                        return node48;
+                    }
+                    return numChildren == 0 ? null : this;
+                } else if (newChild != childNode) {
+                    // Child was replaced
+                    nodes[idx] = newChild;
+                }
+                return this;
+            }
+        }
+        return this; // Key not found, return unchanged
+    }
+
+    @Override
     public String printDiagram(String prefix, int level) {
         return "";
     }

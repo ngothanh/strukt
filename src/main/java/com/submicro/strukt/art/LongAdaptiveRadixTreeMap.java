@@ -41,6 +41,24 @@ public class LongAdaptiveRadixTreeMap<V> {
         // log.debug(printDiagram()); // Commented out for now
     }
 
+    public V remove(final long key) {
+        if (root == null) {
+            return null;
+        }
+
+        V removedValue = root.get(key, INITIAL_LEVEL);
+        if (removedValue != null) {
+            // Use the proper remove method
+            ArtNode<V> newRoot = root.remove(key, INITIAL_LEVEL);
+            root = newRoot; // newRoot can be null if the tree becomes empty
+        }
+        return removedValue;
+    }
+
+    public boolean isEmpty() {
+        return root == null;
+    }
+
     public String printDiagram() {
         if (root != null) {
             return root.printDiagram("", INITIAL_LEVEL);

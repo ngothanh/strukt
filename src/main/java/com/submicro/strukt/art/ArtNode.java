@@ -8,6 +8,8 @@ public interface ArtNode<V> {
 
     V get(long key, int level);
 
+    ArtNode<V> remove(long key, int level);
+
     ObjectsPool getObjectsPool();
 
     String printDiagram(String prefix, int level);

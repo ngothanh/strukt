@@ -112,6 +112,55 @@ public class ArtNode4<V> implements ArtNode<V> {
     }
 
     @Override
+    public ArtNode<V> remove(long key, int level) {
+        if (level != nodeLevel && ((key ^ nodeKey) & (-1L << (nodeLevel + 8))) != 0) {
+            return this; // Key not found, return unchanged
+        }
+
+        final short keyByte = (short) ((key >>> nodeLevel) & 0xFF);
+        for (int i = 0; i < numChildren; i++) {
+            final short branchByte = keys[i];
+            if (branchByte == keyByte) {
+                if (nodeLevel == 0) {
+                    // Leaf level - remove this entry
+                    removeChildAt(i);
+                    return numChildren == 0 ? null : this;
+                } else {
+                    // Internal node - recurse
+                    ArtNode<V> childNode = (ArtNode<V>) nodes[i];
+                    ArtNode<V> newChild = childNode.remove(key, nodeLevel - 8);
+
+                    if (newChild == null) {
+                        // Child was removed completely
+                        removeChildAt(i);
+                        return numChildren == 0 ? null : this;
+                    } else if (newChild != childNode) {
+                        // Child was replaced
+                        nodes[i] = newChild;
+                    }
+                    return this;
+                }
+            }
+            if (keyByte < branchByte) {
+                break; // Key not found
+            }
+        }
+        return this; // Key not found, return unchanged
+    }
+
+    private void removeChildAt(int index) {
+        // Shift elements left to fill the gap
+        for (int i = index; i < numChildren - 1; i++) {
+            keys[i] = keys[i + 1];
+            nodes[i] = nodes[i + 1];
+        }
+        // Clear the last element
+        keys[numChildren - 1] = 0;
+        nodes[numChildren - 1] = null;
+        numChildren--;
+    }
+
+    @Override
     public ObjectsPool getObjectsPool() {
         return objectsPool;
     }
@@ -163,5 +212,17 @@ public class ArtNode4<V> implements ArtNode<V> {
         }
         this.nodeKey = key1;
         this.nodeLevel = level;
+    }
+
+    void initFromNode16(ArtNode16<V> node16) {
+        this.nodeLevel = node16.nodeLevel;
+        this.nodeKey = node16.nodeKey;
+        this.numChildren = node16.numChildren;
+
+        // Copy keys and nodes from node16
+        System.arraycopy(node16.keys, 0, this.keys, 0, numChildren);
+        System.arraycopy(node16.nodes, 0, this.nodes, 0, numChildren);
+
+        node16.recycle();
     }
 }

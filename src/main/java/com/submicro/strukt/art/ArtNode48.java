@@ -96,6 +96,72 @@ public class ArtNode48<V> implements ArtNode<V> {
     }
 
     @Override
+    public ArtNode<V> remove(long key, int level) {
+        if (level != nodeLevel && ((key ^ nodeKey) & (-1L << (nodeLevel + 8))) != 0) {
+            return this; // Key not found, return unchanged
+        }
+
+        final short idx = (short) ((key >>> nodeLevel) & 0xFF);
+        final byte nodeIndex = indexes[idx];
+        if (nodeIndex != -1) {
+            if (nodeLevel == 0) {
+                // Leaf level - remove this entry
+                removeChildAt(idx, nodeIndex);
+
+                // Check if we should shrink to ArtNode16
+                if (numChildren <= 16) {
+                    ArtNode16<V> node16 = objectsPool.get(ObjectsPool.ART_NODE_16, ArtNode16::new);
+                    node16.initFromNode48(this);
+                    return node16;
+                }
+                return numChildren == 0 ? null : this;
+            } else {
+                // Internal node - recurse
+                ArtNode<V> childNode = (ArtNode<V>) nodes[nodeIndex];
+                ArtNode<V> newChild = childNode.remove(key, nodeLevel - 8);
+
+                if (newChild == null) {
+                    // Child was removed completely
+                    removeChildAt(idx, nodeIndex);
+
+                    // Check if we should shrink to ArtNode16
+                    if (numChildren <= 16) {
+                        ArtNode16<V> node16 = objectsPool.get(ObjectsPool.ART_NODE_16, ArtNode16::new);
+                        node16.initFromNode48(this);
+                        return node16;
+                    }
+                    return numChildren == 0 ? null : this;
+                } else if (newChild != childNode) {
+                    // Child was replaced
+                    nodes[nodeIndex] = newChild;
+                }
+                return this;
+            }
+        }
+        return this; // Key not found, return unchanged
+    }
+
+    private void removeChildAt(short idx, byte nodeIndex) {
+        // Remove the mapping
+        indexes[idx] = -1;
+        nodes[nodeIndex] = null;
+        numChildren--;
+
+        // Compact the nodes array by moving the last element to fill the gap
+        if (nodeIndex < numChildren) {
+            // Find the index that points to the last element
+            for (short i = 0; i < 256; i++) {
+                if (indexes[i] == numChildren) {
+                    indexes[i] = nodeIndex;
+                    break;
+                }
+            }
+            nodes[nodeIndex] = nodes[numChildren];
+            nodes[numChildren] = null;
+        }
+    }
+
+    @Override
     public ObjectsPool getObjectsPool() {
         return objectsPool;
     }
@@ -131,5 +197,28 @@ public class ArtNode48<V> implements ArtNode<V> {
 
         Arrays.fill(node16.nodes, null);
         objectsPool.put(ObjectsPool.ART_NODE_16, node16);
+    }
+
+    public void initFromNode256(ArtNode256<V> node256) {
+        this.nodeLevel = node256.nodeLevel;
+        this.nodeKey = node256.nodeKey;
+        this.numChildren = (byte) node256.numChildren;
+
+        // Initialize indexes to -1
+        Arrays.fill(indexes, (byte) -1);
+
+        // Copy non-null entries from node256
+        int nodeIndex = 0;
+        for (short i = 0; i < 256 && nodeIndex < numChildren; i++) {
+            if (node256.nodes[i] != null) {
+                indexes[i] = (byte) nodeIndex;
+                nodes[nodeIndex] = node256.nodes[i];
+                nodeIndex++;
+            }
+        }
+
+        this.freeBitMask = (1L << numChildren) - 1;
+
+        node256.recycle();
     }
 }
