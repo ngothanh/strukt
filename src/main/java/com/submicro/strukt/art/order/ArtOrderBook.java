@@ -47,7 +47,7 @@ public class ArtOrderBook implements OrderBook {
 
         idMap.put(newOrderId, order);
 
-        updateBestOrder(action);
+        updateBestOrder(order);
     }
 
     private LongAdaptiveRadixTreeMap<OrderBucket> getMatchedBucket(OrderAction action) {
@@ -121,25 +121,52 @@ public class ArtOrderBook implements OrderBook {
         order.prev = order.next = null;
         order.parent = null;
 
-        updateBestOrder(order.action);
+        updateBestOrderAfterRemoval(order);
     }
 
-    private void updateBestOrder(OrderAction action) {
-        LongAdaptiveRadixTreeMap<OrderBucket> source = getPlacedBucket(action);
-        if (action == OrderAction.ASK) {
-            bestAskOrder = null;
-            source.forEach((price, bucket) -> {
-                if (bestAskOrder == null && !bucket.isEmpty()) {
-                    bestAskOrder = bucket.head;
-                }
-            }, 1);
+    private void updateBestOrder(Order newOrder) {
+        if (newOrder.action == OrderAction.ASK) {
+            if (bestAskOrder == null || newOrder.price < bestAskOrder.price) {
+                bestAskOrder = newOrder;
+            }
         } else {
-            bestBidOrder = null;
-            source.forEachDesc((price, bucket) -> {
-                if (bestBidOrder == null && !bucket.isEmpty()) {
-                    bestBidOrder = bucket.head;
-                }
-            }, 1);
+            // For bids, best is highest price
+            if (bestBidOrder == null || newOrder.price > bestBidOrder.price) {
+                bestBidOrder = newOrder;
+            }
         }
+    }
+
+    private void updateBestOrderAfterRemoval(Order removedOrder) {
+        if (removedOrder == bestAskOrder) {
+            bestAskOrder = findNextBestAsk();
+        }
+        if (removedOrder == bestBidOrder) {
+            bestBidOrder = findNextBestBid();
+        }
+    }
+
+    private Order findNextBestAsk() {
+        // Find the order with the lowest price in ask buckets
+        // forEach returns items in ascending order (lowest price first)
+        final Order[] result = new Order[1];
+        askBuckets.forEach((price, bucket) -> {
+            if (result[0] == null && !bucket.isEmpty()) {
+                result[0] = bucket.head; // First order in the bucket (FIFO)
+            }
+        }, 1);
+        return result[0];
+    }
+
+    private Order findNextBestBid() {
+        // Find the order with the highest price in bid buckets
+        // forEachDesc returns items in descending order (highest price first)
+        final Order[] result = new Order[1];
+        bidBuckets.forEachDesc((price, bucket) -> {
+            if (result[0] == null && !bucket.isEmpty()) {
+                result[0] = bucket.head; // First order in the bucket (FIFO)
+            }
+        }, 1);
+        return result[0];
     }
 }
