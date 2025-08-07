@@ -232,6 +232,45 @@ public class ArtNode16<V> implements ArtNode<V> {
         }
     }
 
+    @Override
+    @SuppressWarnings("unchecked")
+    public int forEach(LongObjConsumer<V> consumer, int limit) {
+        if (nodeLevel == 0) {
+            final long keyBase = (nodeKey >>> 8) << 8;
+            final int n = Math.min(numChildren, limit);
+            for (int i = 0; i < n; i++) {
+                consumer.accept(keyBase + keys[i], (V) nodes[i]);
+            }
+            return n;
+        } else {
+            int numLeft = limit;
+            for (int i = 0; i < numChildren && numLeft > 0; i++) {
+                numLeft -= ((ArtNode<V>) nodes[i]).forEach(consumer, numLeft);
+            }
+            return limit - numLeft;
+        }
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public int forEachDesc(LongObjConsumer<V> consumer, int limit) {
+        if (nodeLevel == 0) {
+            final long keyBase = (nodeKey >>> 8) << 8;
+            int numFound = 0;
+            for (int i = numChildren - 1; i >= 0 && numFound < limit; i--) {
+                consumer.accept(keyBase + keys[i], (V) nodes[i]);
+                numFound++;
+            }
+            return numFound;
+        } else {
+            int numLeft = limit;
+            for (int i = numChildren - 1; i >= 0 && numLeft > 0; i--) {
+                numLeft -= ((ArtNode<V>) nodes[i]).forEachDesc(consumer, numLeft);
+            }
+            return limit - numLeft;
+        }
+    }
+
     private void removeElementAtPos(final int pos) {
         final int ppos = pos + 1;
         final int copyLength = numChildren - ppos;

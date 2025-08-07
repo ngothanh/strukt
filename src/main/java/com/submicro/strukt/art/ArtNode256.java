@@ -171,6 +171,64 @@ public class ArtNode256<V> implements ArtNode<V> {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
+    public int forEach(LongObjConsumer<V> consumer, int limit) {
+        if (nodeLevel == 0) {
+            final long keyBase = (nodeKey >>> 8) << 8;
+            int numFound = 0;
+            for (short i = 0; i < 256; i++) {
+                if (numFound == limit) {
+                    return numFound;
+                }
+                final V node = (V) nodes[i];
+                if (node != null) {
+                    consumer.accept(keyBase + i, node);
+                    numFound++;
+                }
+            }
+            return numFound;
+        } else {
+            int numLeft = limit;
+            for (short i = 0; i < 256 && numLeft > 0; i++) {
+                final ArtNode<V> node = (ArtNode<V>) nodes[i];
+                if (node != null) {
+                    numLeft -= node.forEach(consumer, numLeft);
+                }
+            }
+            return limit - numLeft;
+        }
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public int forEachDesc(LongObjConsumer<V> consumer, int limit) {
+        if (nodeLevel == 0) {
+            final long keyBase = (nodeKey >>> 8) << 8;
+            int numFound = 0;
+            for (short i = 255; i >= 0; i--) {
+                if (numFound == limit) {
+                    return numFound;
+                }
+                final V node = (V) nodes[i];
+                if (node != null) {
+                    consumer.accept(keyBase + i, node);
+                    numFound++;
+                }
+            }
+            return numFound;
+        } else {
+            int numLeft = limit;
+            for (short i = 255; i >= 0 && numLeft > 0; i--) {
+                final ArtNode<V> node = (ArtNode<V>) nodes[i];
+                if (node != null) {
+                    numLeft -= node.forEachDesc(consumer, numLeft);
+                }
+            }
+            return limit - numLeft;
+        }
+    }
+
+    @Override
     public String printDiagram(String prefix, int level) {
         return "";
     }
