@@ -71,6 +71,23 @@ public class LongAdaptiveRadixTreeMap<V> {
         return removedValue;
     }
 
+
+    public int forEach(LongObjConsumer<V> consumer, int limit) {
+        if (root != null) {
+            return root.forEach(consumer, limit);
+        } else {
+            return 0;
+        }
+    }
+
+    public int forEachDesc(LongObjConsumer<V> consumer, int limit) {
+        if (root != null) {
+            return root.forEachDesc(consumer, limit);
+        } else {
+            return 0;
+        }
+    }
+
     public boolean isEmpty() {
         return root == null;
     }
