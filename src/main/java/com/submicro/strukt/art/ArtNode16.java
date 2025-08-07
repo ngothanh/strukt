@@ -112,6 +112,77 @@ public class ArtNode16<V> implements ArtNode<V> {
 
     @Override
     @SuppressWarnings("unchecked")
+    public V getCeilingValue(long key, int level) {
+        if ((level != nodeLevel)) {
+            final long mask = -1L << (nodeLevel + 8);
+            final long keyWithMask = key & mask;
+            final long nodeKeyWithMask = nodeKey & mask;
+            if (nodeKeyWithMask < keyWithMask) {
+                return null;
+            } else if (keyWithMask != nodeKeyWithMask) {
+                key = 0;
+            }
+        }
+
+        final short nodeIndex = (short) ((key >>> nodeLevel) & 0xFF);
+
+        for (int i = 0; i < numChildren; i++) {
+            final short index = keys[i];
+            if (index == nodeIndex) {
+                final V res = nodeLevel == 0
+                        ? (V) nodes[i]
+                        : ((ArtNode<V>) nodes[i]).getCeilingValue(key, nodeLevel - 8);
+                if (res != null) {
+                    return res;
+                }
+            }
+            if (index > nodeIndex) {
+                return nodeLevel == 0
+                        ? (V) nodes[i]
+                        : ((ArtNode<V>) nodes[i]).getCeilingValue(0, nodeLevel - 8); // take lowest existing key
+            }
+        }
+        return null;
+    }
+
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public V getFloorValue(long key, int level) {
+        if ((level != nodeLevel)) {
+            final long mask = -1L << (nodeLevel + 8);
+            final long keyWithMask = key & mask;
+            final long nodeKeyWithMask = nodeKey & mask;
+            if (nodeKeyWithMask > keyWithMask) {
+                return null;
+            } else if (keyWithMask != nodeKeyWithMask) {
+                key = Long.MAX_VALUE;
+            }
+        }
+
+        final short nodeIndex = (short) ((key >>> nodeLevel) & 0xFF);
+
+        for (int i = numChildren - 1; i >= 0; i--) {
+            final short index = keys[i];
+            if (index == nodeIndex) {
+                final V res = nodeLevel == 0
+                        ? (V) nodes[i]
+                        : ((ArtNode<V>) nodes[i]).getFloorValue(key, nodeLevel - 8);
+                if (res != null) {
+                    return res;
+                }
+            }
+            if (index < nodeIndex) {
+                return nodeLevel == 0
+                        ? (V) nodes[i]
+                        : ((ArtNode<V>) nodes[i]).getFloorValue(Long.MAX_VALUE, nodeLevel - 8); // take highest existing key
+            }
+        }
+        return null;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
     public ArtNode<V> remove(long key, int level) {
         if (level != nodeLevel && ((key ^ nodeKey) & (-1L << (nodeLevel + 8))) != 0) {
             return this;

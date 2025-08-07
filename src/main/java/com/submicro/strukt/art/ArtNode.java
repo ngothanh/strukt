@@ -8,6 +8,10 @@ public interface ArtNode<V> {
 
     V get(long key, int level);
 
+    V getCeilingValue(long key, int level);
+
+    V getFloorValue(long key, int level);
+
     ArtNode<V> remove(long key, int level);
 
     ObjectsPool getObjectsPool();

@@ -20,6 +20,22 @@ public class LongAdaptiveRadixTreeMap<V> {
         objectsPool = ObjectsPool.createDefaultTestPool();
     }
 
+    public V getHigherValue(long key) {
+        if (root != null && key != Long.MAX_VALUE) {
+            return root.getCeilingValue(key + 1, INITIAL_LEVEL);
+        } else {
+            return null;
+        }
+    }
+
+    public V getLowerValue(long key) {
+        if (root != null && key != 0) {
+            return root.getFloorValue(key - 1, INITIAL_LEVEL);
+        } else {
+            return null;
+        }
+    }
+
     public V get(final long key) {
         return root != null
                 ? root.get(key, INITIAL_LEVEL)

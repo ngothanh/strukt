@@ -101,6 +101,84 @@ public class ArtNode48<V> implements ArtNode<V> {
 
     @Override
     @SuppressWarnings("unchecked")
+    public V getCeilingValue(long key, int level) {
+        if ((level != nodeLevel)) {
+            final long mask = -1L << (nodeLevel + 8);
+            final long keyWithMask = key & mask;
+            final long nodeKeyWithMask = nodeKey & mask;
+            if (nodeKeyWithMask < keyWithMask) {
+                return null;
+            } else if (keyWithMask != nodeKeyWithMask) {
+                key = 0;
+            }
+        }
+
+        short idx = (short) ((key >>> nodeLevel) & 0xFF);
+
+        byte index = indexes[idx];
+        if (index != -1) {
+            final V res = nodeLevel == 0 ? (V) nodes[index] : ((ArtNode<V>) nodes[index]).getCeilingValue(key, nodeLevel - 8);
+            if (res != null) {
+                return res;
+            }
+        }
+
+        while (++idx < 256) {
+            index = indexes[idx];
+            if (index != -1) {
+                if (nodeLevel == 0) {
+                    return (V) nodes[index];
+                } else {
+                    return ((ArtNode<V>) nodes[index]).getCeilingValue(0, nodeLevel - 8);
+                }
+            }
+        }
+
+        // no keys found
+        return null;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public V getFloorValue(long key, int level) {
+        if ((level != nodeLevel)) {
+            final long mask = -1L << (nodeLevel + 8);
+            final long keyWithMask = key & mask;
+            final long nodeKeyWithMask = nodeKey & mask;
+            if (nodeKeyWithMask > keyWithMask) {
+                return null;
+            } else if (keyWithMask != nodeKeyWithMask) {
+                key = Long.MAX_VALUE;
+            }
+        }
+
+        short idx = (short) ((key >>> nodeLevel) & 0xFF);
+
+        byte index = indexes[idx];
+        if (index != -1) {
+            final V res = nodeLevel == 0 ? (V) nodes[index] : ((ArtNode<V>) nodes[index]).getFloorValue(key, nodeLevel - 8);
+            if (res != null) {
+                return res;
+            }
+        }
+
+        while (--idx >= 0) {
+            index = indexes[idx];
+            if (index != -1) {
+                if (nodeLevel == 0) {
+                    return (V) nodes[index];
+                } else {
+                    return ((ArtNode<V>) nodes[index]).getFloorValue(Long.MAX_VALUE, nodeLevel - 8);
+                }
+            }
+        }
+
+        return null;
+    }
+
+
+    @Override
+    @SuppressWarnings("unchecked")
     public ArtNode<V> remove(long key, int level) {
         if (level != nodeLevel && ((key ^ nodeKey) & (-1L << (nodeLevel + 8))) != 0) {
             return this;
