@@ -1,6 +1,7 @@
 package com.submicro.strukt.art.order;
 
 import com.submicro.strukt.art.LongAdaptiveRadixTreeMap;
+import com.submicro.strukt.art.LongObjConsumer;
 import com.submicro.strukt.art.pool.ObjectsPool;
 
 public class ArtOrderBook implements OrderBook {
@@ -46,11 +47,7 @@ public class ArtOrderBook implements OrderBook {
 
         idMap.put(newOrderId, order);
 
-        if (action == OrderAction.ASK && (bestAskOrder == null || price < bestAskOrder.price)) {
-            bestAskOrder = order;
-        } else if (action == OrderAction.BID && (bestBidOrder == null || price > bestBidOrder.price)) {
-            bestBidOrder = order;
-        }
+        updateBestOrder(action);
     }
 
     private LongAdaptiveRadixTreeMap<OrderBucket> getMatchedBucket(OrderAction action) {
@@ -121,23 +118,28 @@ public class ArtOrderBook implements OrderBook {
             getPlacedBucket(order.action).remove(order.price);
         }
 
-        if (order == bestAskOrder) {
-            bestAskOrder = findNextBestAsk(order.price);
-        } else if (order == bestBidOrder) {
-            bestBidOrder = findNextBestBid(order.price);
-        }
-
         order.prev = order.next = null;
         order.parent = null;
+
+        updateBestOrder(order.action);
     }
 
-    private Order findNextBestAsk(long price) {
-        OrderBucket bucket = askBuckets.getHigherValue(price);
-        return bucket != null ? bucket.head : null;
-    }
-
-    private Order findNextBestBid(long price) {
-        OrderBucket bucket = bidBuckets.getLowerValue(price);
-        return bucket != null ? bucket.head : null;
+    private void updateBestOrder(OrderAction action) {
+        LongAdaptiveRadixTreeMap<OrderBucket> source = getPlacedBucket(action);
+        if (action == OrderAction.ASK) {
+            bestAskOrder = null;
+            source.forEach((price, bucket) -> {
+                if (bestAskOrder == null && !bucket.isEmpty()) {
+                    bestAskOrder = bucket.head;
+                }
+            }, 1);
+        } else {
+            bestBidOrder = null;
+            source.forEachDesc((price, bucket) -> {
+                if (bestBidOrder == null && !bucket.isEmpty()) {
+                    bestBidOrder = bucket.head;
+                }
+            }, 1);
+        }
     }
 }
