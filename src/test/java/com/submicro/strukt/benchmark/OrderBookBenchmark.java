@@ -4,261 +4,203 @@ import com.submicro.strukt.art.order.*;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
 
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Comprehensive benchmark suite for ArtOrderBook vs TreeSetOrderBook.
- * Implements the 8 decision matrix scenarios to determine optimal usage patterns.
- *
- * Note: JMH configuration is handled by dedicated runners, not annotations.
+ * Comprehensive JMH benchmarks for OrderBook.newOrder() method.
+ * Tests various scenarios including pure inserts, matches, partial matches,
+ * random mixes, hotspot scenarios, and cold book operations.
+ * 
+ * Measures both throughput (ops/sec) and latency distribution (p50, p90, p99).
  */
-@State(Scope.Benchmark)
+@BenchmarkMode({Mode.Throughput, Mode.SampleTime})
+@OutputTimeUnit(TimeUnit.MICROSECONDS)
+@Warmup(iterations = 10, time = 10, timeUnit = TimeUnit.SECONDS)
+@Measurement(iterations = 10, time = 10, timeUnit = TimeUnit.SECONDS)
+@Fork(value = 1, jvmArgs = {
+    "-Xmx2G", "-Xms2G",
+    "-XX:+UseG1GC",
+    "-XX:+UnlockExperimentalVMOptions",
+    "-XX:+UseStringDeduplication",
+    "-Xlog:gc*:gc.log"
+})
+@Threads(1) // Start with single thread, can be parameterized later
 public class OrderBookBenchmark {
 
-    // These will be set by the runner via JMH parameters
-    @Param({})
-    private int datasetSize;
+    /**
+     * Scenario 1: Pure Insert - No matches, all orders added to book
+     * Tests insert path, tree growth, idMap usage
+     */
+    @Benchmark
+    public void pureInsertScenario(OrderBookBenchmarkState state, Blackhole bh) {
+        OrderBook book = state.createOrderBook();
+        
+        for (OrderCommand cmd : state.pureInsertOrders) {
+            book.newOrder(cmd);
+        }
+        
+        bh.consume(book);
+    }
 
-    @Param({})
-    private String implementation;
-    
-    private OrderBook orderBook;
-    private BenchmarkDataGenerator dataGenerator;
-    
-    // Test data for different scenarios
-    private List<OrderCommand> sequentialOrders;
-    private List<OrderCommand> randomSparseOrders;
-    private List<OrderCommand> clusteredOrders;
-    private List<OrderCommand> prefixSharedOrders;
-    private List<OrderCommand> mixedWorkloadReadHeavy;
-    private List<OrderCommand> mixedWorkloadBalanced;
-    private List<OrderCommand> mixedWorkloadWriteHeavy;
-    private List<OrderCommand> hotspotOrders;
-    private List<OrderCommand> rangeQueryOrders;
-    
-    @Setup(Level.Trial)
-    public void setupTrial() {
-        dataGenerator = new BenchmarkDataGenerator(42L);
-        
-        // Pre-generate all test data
-        sequentialOrders = dataGenerator.generateSequentialOrders(datasetSize, OrderAction.ASK);
-        randomSparseOrders = dataGenerator.generateRandomSparseOrders(datasetSize, OrderAction.ASK);
-        clusteredOrders = dataGenerator.generateClusteredOrders(datasetSize, OrderAction.ASK);
-        prefixSharedOrders = dataGenerator.generatePrefixSharedOrders(datasetSize, OrderAction.ASK);
-        
-        // Mixed workloads: read%, write%, remove%
-        mixedWorkloadReadHeavy = dataGenerator.generateMixedWorkload(datasetSize, 0.95, 0.05, 0.0);
-        mixedWorkloadBalanced = dataGenerator.generateMixedWorkload(datasetSize, 0.50, 0.30, 0.20);
-        mixedWorkloadWriteHeavy = dataGenerator.generateMixedWorkload(datasetSize, 0.20, 0.80, 0.0);
-        
-        hotspotOrders = dataGenerator.generateHotspotOrders(datasetSize, OrderAction.ASK);
-        rangeQueryOrders = dataGenerator.generateRangeQueryOrders(datasetSize, OrderAction.ASK);
-    }
-    
-    @Setup(Level.Iteration)
-    public void setupIteration() {
-        // Create fresh order book for each iteration
-        if ("ART".equals(implementation)) {
-            orderBook = new ArtOrderBook();
-        } else {
-            orderBook = new TreeSetOrderBook();
-        }
-        dataGenerator.reset();
-    }
-    
-    // ========== Scenario 1: Scale Threshold Analysis ==========
-    
+    /**
+     * Scenario 2: Pure Match - 100% matched orders
+     * Tests matching logic, getBestMatchingOrder(), removeOrder()
+     */
     @Benchmark
-    public void scenario1_scaleThreshold_sequentialInsert(Blackhole bh) {
-        for (OrderCommand order : sequentialOrders) {
-            orderBook.newOrder(order);
-        }
-        bh.consume(orderBook);
-    }
-    
-    @Benchmark
-    public void scenario1_scaleThreshold_randomLookup(Blackhole bh) {
-        // First populate the order book
-        for (OrderCommand order : sequentialOrders) {
-            orderBook.newOrder(order);
+    public void pureMatchScenario(OrderBookBenchmarkState state, Blackhole bh) {
+        OrderBook book = state.prefilledOrderBook;
+        
+        for (OrderCommand cmd : state.pureMatchOrders) {
+            book.newOrder(cmd);
         }
         
-        // Then perform random lookups by creating matching orders
-        for (int i = 0; i < Math.min(10000, datasetSize); i++) {
-            long price = (i % datasetSize) + 1;
-            OrderCommand matchingOrder = createMatchingOrder(price);
-            orderBook.newOrder(matchingOrder);
-            bh.consume(matchingOrder);
-        }
+        bh.consume(book);
     }
-    
-    // ========== Scenario 2: Key Distribution Impact ==========
-    
-    @Benchmark
-    public void scenario2_keyDistribution_sequential(Blackhole bh) {
-        for (OrderCommand order : sequentialOrders) {
-            orderBook.newOrder(order);
-        }
-        bh.consume(orderBook);
-    }
-    
-    @Benchmark
-    public void scenario2_keyDistribution_randomSparse(Blackhole bh) {
-        for (OrderCommand order : randomSparseOrders) {
-            orderBook.newOrder(order);
-        }
-        bh.consume(orderBook);
-    }
-    
-    @Benchmark
-    public void scenario2_keyDistribution_clustered(Blackhole bh) {
-        for (OrderCommand order : clusteredOrders) {
-            orderBook.newOrder(order);
-        }
-        bh.consume(orderBook);
-    }
-    
-    @Benchmark
-    public void scenario2_keyDistribution_prefixShared(Blackhole bh) {
-        for (OrderCommand order : prefixSharedOrders) {
-            orderBook.newOrder(order);
-        }
-        bh.consume(orderBook);
-    }
-    
-    // ========== Scenario 3: Operation Mix Sensitivity ==========
-    
-    @Benchmark
-    public void scenario3_operationMix_readHeavy(Blackhole bh) {
-        for (OrderCommand order : mixedWorkloadReadHeavy) {
-            orderBook.newOrder(order);
-        }
-        bh.consume(orderBook);
-    }
-    
-    @Benchmark
-    public void scenario3_operationMix_balanced(Blackhole bh) {
-        for (OrderCommand order : mixedWorkloadBalanced) {
-            orderBook.newOrder(order);
-        }
-        bh.consume(orderBook);
-    }
-    
-    @Benchmark
-    public void scenario3_operationMix_writeHeavy(Blackhole bh) {
-        for (OrderCommand order : mixedWorkloadWriteHeavy) {
-            orderBook.newOrder(order);
-        }
-        bh.consume(orderBook);
-    }
-    
-    // ========== Scenario 5: Access Pattern Locality ==========
-    
-    @Benchmark
-    public void scenario5_accessPattern_sequential(Blackhole bh) {
-        // Populate first
-        for (OrderCommand order : sequentialOrders) {
-            orderBook.newOrder(order);
-        }
-        
-        // Sequential access pattern
-        for (int i = 1; i <= Math.min(1000, datasetSize); i++) {
-            OrderCommand matchingOrder = createMatchingOrder(i);
-            orderBook.newOrder(matchingOrder);
-            bh.consume(matchingOrder);
-        }
-    }
-    
-    @Benchmark
-    public void scenario5_accessPattern_hotspot(Blackhole bh) {
-        for (OrderCommand order : hotspotOrders) {
-            orderBook.newOrder(order);
-        }
-        bh.consume(orderBook);
-    }
-    
-    // ========== Scenario 4: Memory Pressure Test ==========
 
+    /**
+     * Scenario 3: Partial Match - 50% matched, remainder inserted
+     * Stresses both match and insert in same flow
+     */
     @Benchmark
-    public void scenario4_memoryPressure_churn(Blackhole bh) {
-        // Simulate memory pressure with continuous churn
-        int churnSize = Math.min(datasetSize, 10000);
-
-        // Initial population
-        for (int i = 0; i < churnSize; i++) {
-            OrderCommand order = createOrder(OrderAction.ASK, i + 1000, 10);
-            orderBook.newOrder(order);
+    public void partialMatchScenario(OrderBookBenchmarkState state, Blackhole bh) {
+        OrderBook book = state.partialMatchOrderBook;
+        
+        for (OrderCommand cmd : state.partialMatchOrders) {
+            book.newOrder(cmd);
         }
+        
+        bh.consume(book);
+    }
 
-        // Churn: remove half, add half (repeat pattern)
-        for (int cycle = 0; cycle < 3; cycle++) {
-            // Remove orders by matching them
-            for (int i = 0; i < churnSize / 2; i++) {
-                OrderCommand matchingOrder = createOrder(OrderAction.BID, i + 1000, 10);
-                orderBook.newOrder(matchingOrder);
+    /**
+     * Scenario 4: Random Mix - 70% unmatched, 30% matched
+     * Random price ranges to simulate realistic L2 activity
+     */
+    @Benchmark
+    public void randomMixScenario(OrderBookBenchmarkState state, Blackhole bh) {
+        OrderBook book = state.randomMixOrderBook;
+        
+        for (OrderCommand cmd : state.randomMixOrders) {
+            book.newOrder(cmd);
+        }
+        
+        bh.consume(book);
+    }
+
+    /**
+     * Scenario 5: Hotspot Match - All orders target same price level
+     * High write pressure on one bucket
+     */
+    @Benchmark
+    public void hotspotMatchScenario(OrderBookBenchmarkState state, Blackhole bh) {
+        OrderBook book = state.createOrderBook();
+        
+        // Pre-fill with one large order to enable matching
+        OrderCommand prefillOrder = new OrderCommand();
+        prefillOrder.orderId = 999999999L;
+        prefillOrder.action = OrderAction.ASK;
+        prefillOrder.price = 100_000L;
+        prefillOrder.size = state.datasetSize * 100L;
+        prefillOrder.uid = 1L;
+        prefillOrder.timestamp = System.currentTimeMillis();
+        book.newOrder(prefillOrder);
+        
+        for (OrderCommand cmd : state.hotspotOrders) {
+            book.newOrder(cmd);
+        }
+        
+        bh.consume(book);
+    }
+
+    /**
+     * Scenario 6: Cold Book - Empty every time
+     * Insert → immediately matched → removed, book size always ~0
+     */
+    @Benchmark
+    public void coldBookScenario(OrderBookBenchmarkState state, Blackhole bh) {
+        OrderBook book = state.createOrderBook();
+        
+        for (int i = 0; i < state.coldBookOrders.length; i += 2) {
+            // Add first order (will be placed in book)
+            if (i < state.coldBookOrders.length) {
+                book.newOrder(state.coldBookOrders[i]);
             }
-
-            // Add new orders
-            for (int i = 0; i < churnSize / 2; i++) {
-                OrderCommand order = createOrder(OrderAction.ASK, i + 2000 + (cycle * 1000), 10);
-                orderBook.newOrder(order);
+            
+            // Add second order (will match and remove first)
+            if (i + 1 < state.coldBookOrders.length) {
+                book.newOrder(state.coldBookOrders[i + 1]);
             }
         }
-        bh.consume(orderBook);
+        
+        bh.consume(book);
     }
 
-    // ========== Scenario 6: Latency Distribution Analysis ==========
-
+    /**
+     * Single order benchmark for latency measurement
+     * Measures individual newOrder() call performance
+     */
     @Benchmark
     @BenchmarkMode(Mode.SampleTime)
-    @OutputTimeUnit(TimeUnit.NANOSECONDS)
-    public void scenario6_latencyDistribution_sustainedLoad(Blackhole bh) {
-        // Pre-populate for sustained load test
-        for (int i = 0; i < Math.min(datasetSize, 5000); i++) {
-            OrderCommand order = createOrder(OrderAction.ASK, i + 1000, 10);
-            orderBook.newOrder(order);
-        }
-
-        // Mixed operations under sustained load
-        for (int i = 0; i < 1000; i++) {
-            double opType = (i % 10) / 10.0;
-            if (opType < 0.7) {
-                // 70% reads (matching operations)
-                OrderCommand matchOrder = createOrder(OrderAction.BID, (i % 1000) + 1000, 1);
-                orderBook.newOrder(matchOrder);
-                bh.consume(matchOrder);
-            } else if (opType < 0.9) {
-                // 20% writes (new orders)
-                OrderCommand newOrder = createOrder(OrderAction.ASK, i + 5000, 10);
-                orderBook.newOrder(newOrder);
-                bh.consume(newOrder);
-            } else {
-                // 10% removes (via matching)
-                OrderCommand removeOrder = createOrder(OrderAction.BID, (i % 1000) + 1000, 20);
-                orderBook.newOrder(removeOrder);
-                bh.consume(removeOrder);
-            }
-        }
+    public void singleOrderLatency(OrderBookBenchmarkState state, Blackhole bh) {
+        OrderBook book = state.createOrderBook();
+        
+        // Use a random order from the pure insert scenario
+        int index = (int) (System.nanoTime() % state.pureInsertOrders.length);
+        OrderCommand cmd = state.pureInsertOrders[index];
+        
+        book.newOrder(cmd);
+        bh.consume(book);
     }
 
-    // ========== Helper Methods ==========
-
-    private OrderCommand createOrder(OrderAction action, long price, long size) {
-        OrderCommand cmd = new OrderCommand();
-        cmd.id = System.nanoTime(); // Use timestamp for unique IDs
-        cmd.orderId = cmd.id;
-        cmd.action = action;
-        cmd.price = price;
-        cmd.size = size;
-        cmd.uid = cmd.id + 1000;
-        cmd.timestamp = System.currentTimeMillis();
-        cmd.reserveBidPrice = 0L;
-        cmd.symbol = 1;
-        return cmd;
+    /**
+     * Batch order processing benchmark
+     * Measures throughput of processing multiple orders in sequence
+     */
+    @Benchmark
+    @BenchmarkMode(Mode.Throughput)
+    public void batchOrderThroughput(OrderBookBenchmarkState state, Blackhole bh) {
+        OrderBook book = state.createOrderBook();
+        
+        // Process a small batch of orders
+        int batchSize = Math.min(1000, state.pureInsertOrders.length);
+        for (int i = 0; i < batchSize; i++) {
+            book.newOrder(state.pureInsertOrders[i]);
+        }
+        
+        bh.consume(book);
     }
 
-    private OrderCommand createMatchingOrder(long price) {
-        return createOrder(OrderAction.BID, price, 1);
+    /**
+     * Memory pressure benchmark
+     * Tests GC behavior under high order volume
+     */
+    @Benchmark
+    public void memoryPressureScenario(OrderBookBenchmarkState state, Blackhole bh) {
+        OrderBook book = state.createOrderBook();
+        
+        // Cycle through different order types to create memory pressure
+        int quarter = state.datasetSize / 4;
+        
+        // Insert orders
+        for (int i = 0; i < quarter && i < state.pureInsertOrders.length; i++) {
+            book.newOrder(state.pureInsertOrders[i]);
+        }
+        
+        // Match some orders
+        for (int i = 0; i < quarter && i < state.pureMatchOrders.length; i++) {
+            book.newOrder(state.pureMatchOrders[i]);
+        }
+        
+        // Random mix
+        for (int i = 0; i < quarter && i < state.randomMixOrders.length; i++) {
+            book.newOrder(state.randomMixOrders[i]);
+        }
+        
+        // Hotspot orders
+        for (int i = 0; i < quarter && i < state.hotspotOrders.length; i++) {
+            book.newOrder(state.hotspotOrders[i]);
+        }
+        
+        bh.consume(book);
     }
 }

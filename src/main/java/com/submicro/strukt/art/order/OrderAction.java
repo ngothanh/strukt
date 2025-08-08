@@ -29,11 +29,14 @@ public enum OrderAction {
     }
 
     public static OrderAction of(byte code) {
-        return switch (code) {
-            case 0 -> ASK;
-            case 1 -> BID;
-            default -> throw new IllegalArgumentException("unknown OrderAction:" + code);
-        };
+        switch (code) {
+            case 0:
+                return ASK;
+            case 1:
+                return BID;
+            default:
+                throw new IllegalArgumentException("unknown OrderAction:" + code);
+        }
     }
 
 
