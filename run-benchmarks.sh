@@ -36,6 +36,8 @@ usage() {
     echo "  -f, --forks FORKS             Number of forks (default: 1)"
     echo "  --threads THREADS             Number of threads (default: 1)"
     echo "  -q, --quick                   Quick test (1 warmup, 1 measurement)"
+    echo "  --gc-analysis                 Enable detailed GC analysis and logging"
+    echo "  --memory-profile              Enable memory profiling with allocation tracking"
     echo "  -h, --help                    Show this help"
     echo ""
     echo "Scenarios:"
@@ -55,6 +57,8 @@ usage() {
     echo "  $0 -s pureInsert -d 100000           # Pure insert with 100K orders"
     echo "  $0 -t ART -q                         # Quick test with ART only"
     echo "  $0 -s \"pureInsert|pureMatch\" -t TreeSet  # Multiple scenarios with TreeSet"
+    echo "  $0 --gc-analysis -d 100000           # Run with detailed GC monitoring"
+    echo "  $0 --memory-profile -s memoryPressure # Memory allocation profiling"
 }
 
 # Parse command line arguments
@@ -91,6 +95,14 @@ while [[ $# -gt 0 ]]; do
         -q|--quick)
             WARMUP_ITERATIONS=1
             MEASUREMENT_ITERATIONS=1
+            shift
+            ;;
+        --gc-analysis)
+            GC_ANALYSIS=true
+            shift
+            ;;
+        --memory-profile)
+            MEMORY_PROFILE=true
             shift
             ;;
         -h|--help)
@@ -131,9 +143,27 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 RESULT_FILE="target/benchmark-results/orderbook-benchmark-$TIMESTAMP.json"
 JMH_CMD="$JMH_CMD -rf json -rff $RESULT_FILE"
 
-# Add GC logging
+# Add GC logging and analysis options
 GC_LOG="target/benchmark-results/gc-$TIMESTAMP.log"
-JMH_CMD="$JMH_CMD -jvmArgs \"-Xmx4G -Xms4G -XX:+UseG1GC -Xlog:gc*:$GC_LOG\""
+JVM_ARGS="-Xmx4G -Xms4G -XX:+UseG1GC -Xlog:gc*:$GC_LOG"
+
+# Enhanced GC analysis if requested
+if [ "$GC_ANALYSIS" = true ]; then
+    JVM_ARGS="$JVM_ARGS -XX:+UnlockExperimentalVMOptions -XX:+UseStringDeduplication"
+    JVM_ARGS="$JVM_ARGS -XX:MaxGCPauseMillis=200 -XX:+PrintGCApplicationStoppedTime"
+    JVM_ARGS="$JVM_ARGS -Xlog:gc*,gc+heap=info,gc+phases=debug:$GC_LOG"
+    echo -e "${YELLOW}GC Analysis enabled - detailed logging to $GC_LOG${NC}"
+fi
+
+# Memory profiling if requested
+if [ "$MEMORY_PROFILE" = true ]; then
+    ALLOC_LOG="target/benchmark-results/allocation-$TIMESTAMP.log"
+    JVM_ARGS="$JVM_ARGS -XX:+PrintGCApplicationStoppedTime"
+    JVM_ARGS="$JVM_ARGS -Xlog:gc*,gc+heap=info,gc+ergo=debug:$ALLOC_LOG"
+    echo -e "${YELLOW}Memory profiling enabled - allocation tracking to $ALLOC_LOG${NC}"
+fi
+
+JMH_CMD="$JMH_CMD -jvmArgs \"$JVM_ARGS\""
 
 echo -e "${GREEN}Running OrderBook benchmarks...${NC}"
 echo -e "${BLUE}Scenario:${NC} $SCENARIO"
