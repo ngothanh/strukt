@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
 @State(Scope.Benchmark)
 public class OrderBookBenchmarkSuite {
 
-    // Test parameters - varied dataset sizes for scaling analysis
+    // Test parameters - varied dataset sizes for scaling analysis (including 1M+ for production-scale testing)
     @Param({"10000", "100000", "1000000"})
     public int datasetSize;
 
@@ -663,5 +663,133 @@ public class OrderBookBenchmarkSuite {
         }
 
         return orders;
+    }
+
+    // ========== SCENARIO 10: CANCEL HEAVY ==========
+    /**
+     * Cancel Heavy Scenario - Tests ID map lookups and bucket removals.
+     * Stream: 70% cancels of existing IDs, 30% inserts
+     * Goals: Random removal from DLL, idMap lookup cost, bucket maintenance
+     * Note: Simulated with order replacement since cancel not implemented
+     */
+    @Benchmark
+    public long scenario10_CancelHeavy(Blackhole bh) {
+        OrderBook book = createOrderBook();
+
+        // Pre-fill with orders to cancel
+        List<OrderCommand> existingOrders = new ArrayList<>();
+        for (int i = 0; i < datasetSize / 2; i++) {
+            OrderCommand order = createOrder(
+                random.nextBoolean() ? OrderAction.ASK : OrderAction.BID,
+                PRICE_MID + (random.nextInt(201) - 100) * TICK_SIZE,
+                generateLogNormalSize()
+            );
+            book.newOrder(order);
+            existingOrders.add(order);
+        }
+
+        long totalProcessed = 0;
+
+        // Process cancel-heavy workload (simulated with replacements)
+        for (int i = 0; i < datasetSize; i++) {
+            double rand = random.nextDouble();
+
+            if (rand < 0.7 && !existingOrders.isEmpty()) {
+                // 70% "cancel" operations (simulated with order replacement)
+                OrderCommand existingOrder = existingOrders.get(random.nextInt(existingOrders.size()));
+                OrderCommand replacement = createOrder(
+                    existingOrder.action,
+                    existingOrder.price + random.nextInt(3) - 1, // Slight price variation
+                    existingOrder.size / 2 // Smaller size
+                );
+                book.newOrder(replacement);
+                totalProcessed++;
+                bh.consume(replacement.orderId);
+                bh.consume(replacement.price);
+            } else {
+                // 30% new inserts
+                OrderCommand newOrder = createOrder(
+                    random.nextBoolean() ? OrderAction.ASK : OrderAction.BID,
+                    PRICE_MID + (random.nextInt(201) - 100) * TICK_SIZE,
+                    generateLogNormalSize()
+                );
+                book.newOrder(newOrder);
+                existingOrders.add(newOrder);
+                totalProcessed++;
+                bh.consume(newOrder.orderId);
+                bh.consume(newOrder.price);
+            }
+        }
+
+        return totalProcessed;
+    }
+
+    // ========== SCENARIO 11: BURST LOAD ==========
+    /**
+     * Burst Load Scenario - Tests performance under sudden load spikes.
+     * Stream: Bursts of orders followed by idle periods
+     * Goals: Tail latency under bursts, GC behavior during spikes
+     */
+    @Benchmark
+    public long scenario11_BurstLoad(Blackhole bh) {
+        OrderBook book = createOrderBook();
+
+        // Pre-fill with mixed book
+        for (OrderCommand order : preFillMixedBook) {
+            book.newOrder(order);
+        }
+
+        long totalProcessed = 0;
+        int burstSize = 1000;
+        int numBursts = datasetSize / burstSize;
+
+        for (int burst = 0; burst < numBursts; burst++) {
+            // Process burst of orders
+            for (int i = 0; i < burstSize; i++) {
+                OrderCommand order = randomMixOrders.get(burst * burstSize + i);
+                book.newOrder(order);
+                totalProcessed++;
+                bh.consume(order.orderId);
+                bh.consume(order.price);
+            }
+
+            // Simulate brief idle period (minimal processing)
+            if (burst < numBursts - 1) {
+                bh.consume(System.nanoTime()); // Minimal work to simulate idle
+            }
+        }
+
+        return totalProcessed;
+    }
+
+    // ========== SCENARIO 12: MEMORY PRESSURE ==========
+    /**
+     * Memory Pressure Scenario - Tests allocation behavior under high memory load.
+     * Stream: Large orders with high allocation rate
+     * Goals: GC behavior, allocation spikes, memory efficiency
+     */
+    @Benchmark
+    public long scenario12_MemoryPressure(Blackhole bh) {
+        OrderBook book = createOrderBook();
+        long totalProcessed = 0;
+
+        // Generate orders with intentionally large allocations
+        for (int i = 0; i < datasetSize; i++) {
+            OrderAction action = random.nextBoolean() ? OrderAction.ASK : OrderAction.BID;
+            long price = PRICE_MID + (random.nextInt(1001) - 500) * TICK_SIZE;
+            long size = 1000 + random.nextInt(9000); // Large sizes for allocation pressure
+
+            OrderCommand order = createOrder(action, price, size);
+            book.newOrder(order);
+            totalProcessed++;
+
+            // Additional allocation pressure
+            bh.consume(order.orderId);
+            bh.consume(order.price);
+            bh.consume(order.size);
+            bh.consume(new byte[100]); // Force additional allocations
+        }
+
+        return totalProcessed;
     }
 }

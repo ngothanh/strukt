@@ -8,13 +8,20 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * OrderBook Latency Benchmark Suite
- * 
+ *
  * Measures individual operation latency distributions using SampleTime mode.
  * Provides detailed percentile analysis (p50, p90, p95, p99, p99.9, p99.99, max).
- * 
+ * Implements HDRHistogram-compatible measurement for CDF analysis.
+ *
  * Configuration: 5 forks, 5 warmup, 10 measurement iterations
  * Mode: SampleTime for detailed latency distribution analysis
  * Dataset sizes: 10K, 100K, 1M orders for scaling analysis
+ *
+ * Key Metrics:
+ * - Individual operation latency (ns)
+ * - Tail latency percentiles (p99, p99.9, p99.99)
+ * - Latency distribution shape
+ * - Cross-validation with Little's Law
  */
 @BenchmarkMode(Mode.SampleTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
@@ -304,5 +311,108 @@ public class OrderBookLatencyBenchmark {
         bh.consume(duplicate.size);
         
         return duplicate.orderId;
+    }
+
+    /**
+     * Latency: Cancel Heavy - Order cancellation simulation latency
+     * Measures individual newOrder() call performance for cancel-heavy workloads
+     */
+    @Benchmark
+    public long latency10_CancelHeavy(OrderBookBenchmarkSuite state, Blackhole bh) {
+        OrderBook book = state.createOrderBook();
+
+        // Pre-fill with orders
+        for (int i = 0; i < 50; i++) {
+            OrderCommand order = new OrderCommand();
+            order.orderId = i;
+            order.action = OrderAction.BID;
+            order.price = state.PRICE_MID - i;
+            order.size = 100L;
+            order.uid = 1000L;
+            order.timestamp = System.nanoTime();
+            order.symbol = 1;
+            book.newOrder(order);
+        }
+
+        // Execute order in cancel-heavy environment
+        OrderCommand order = new OrderCommand();
+        order.orderId = 1000L;
+        order.action = OrderAction.ASK;
+        order.price = state.PRICE_MID;
+        order.size = 100L;
+        order.uid = 1000L;
+        order.timestamp = System.nanoTime();
+        order.symbol = 1;
+        book.newOrder(order);
+
+        bh.consume(order.orderId);
+        bh.consume(order.price);
+        bh.consume(order.size);
+
+        return order.orderId;
+    }
+
+    /**
+     * Latency: Burst Load - Single operation latency during burst conditions
+     * Measures individual newOrder() call performance under burst load
+     */
+    @Benchmark
+    public long latency11_BurstLoad(OrderBookBenchmarkSuite state, Blackhole bh) {
+        OrderBook book = state.createOrderBook();
+
+        // Pre-fill to simulate burst environment
+        for (int i = 0; i < 100; i++) {
+            OrderCommand burstOrder = new OrderCommand();
+            burstOrder.orderId = i;
+            burstOrder.action = i % 2 == 0 ? OrderAction.BID : OrderAction.ASK;
+            burstOrder.price = state.PRICE_MID + (i % 21 - 10);
+            burstOrder.size = 100L;
+            burstOrder.uid = 1000L;
+            burstOrder.timestamp = System.nanoTime();
+            burstOrder.symbol = 1;
+            book.newOrder(burstOrder);
+        }
+
+        // Execute single order during burst
+        OrderCommand order = state.randomMixOrders.get(0);
+        book.newOrder(order);
+
+        bh.consume(order.orderId);
+        bh.consume(order.price);
+        bh.consume(order.size);
+
+        return order.orderId;
+    }
+
+    /**
+     * Latency: Memory Pressure - Single operation latency under memory pressure
+     * Measures individual newOrder() call performance with high allocation rate
+     */
+    @Benchmark
+    public long latency12_MemoryPressure(OrderBookBenchmarkSuite state, Blackhole bh) {
+        OrderBook book = state.createOrderBook();
+
+        // Create memory pressure with allocations
+        for (int i = 0; i < 100; i++) {
+            bh.consume(new byte[1000]); // Force allocations
+        }
+
+        // Execute single order under memory pressure
+        OrderCommand order = new OrderCommand();
+        order.orderId = 1000L;
+        order.action = OrderAction.ASK;
+        order.price = state.PRICE_MID;
+        order.size = 5000L; // Large size for additional pressure
+        order.uid = 1000L;
+        order.timestamp = System.nanoTime();
+        order.symbol = 1;
+        book.newOrder(order);
+
+        bh.consume(order.orderId);
+        bh.consume(order.price);
+        bh.consume(order.size);
+        bh.consume(new byte[500]); // Additional allocation pressure
+
+        return order.orderId;
     }
 }

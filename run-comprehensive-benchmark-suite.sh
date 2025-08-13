@@ -131,23 +131,37 @@ case $MODE in
     "comprehensive")
         echo -e "${GREEN}Running comprehensive benchmark suite...${NC}"
         echo -e "${YELLOW}Phase 1: Throughput measurements (5 forks, 5 warmup, 10 measurement)${NC}"
-        
+
         THROUGHPUT_FILE="target/benchmark-results/throughput-comprehensive-$TIMESTAMP.json"
         java -cp "$CLASSPATH" org.openjdk.jmh.Main "OrderBookBenchmarkSuite.$SCENARIO" \
             $BASE_ARGS \
             -rf json -rff "$THROUGHPUT_FILE" \
             -prof gc
-        
+
         echo -e "${YELLOW}Phase 2: Latency measurements (SampleTime mode)${NC}"
-        
+
         LATENCY_FILE="target/benchmark-results/latency-comprehensive-$TIMESTAMP.json"
         java -cp "$CLASSPATH" org.openjdk.jmh.Main "OrderBookLatencyBenchmark.latency.*" \
             $BASE_ARGS \
             -rf json -rff "$LATENCY_FILE" \
             -prof gc
-        
+
+        echo -e "${YELLOW}Phase 3: GC profiling measurements${NC}"
+
+        GC_PROFILE_FILE="target/benchmark-results/gc-profile-comprehensive-$TIMESTAMP.json"
+        GC_LOG="target/benchmark-results/gc-comprehensive-$TIMESTAMP.log"
+        java -cp "$CLASSPATH" \
+            -Xlog:gc*:"$GC_LOG" \
+            org.openjdk.jmh.Main "OrderBookGCProfileBenchmark.gcProfile.*" \
+            $BASE_ARGS \
+            -rf json -rff "$GC_PROFILE_FILE" \
+            -prof gc \
+            -prof stack
+
         echo -e "${BLUE}Throughput results:${NC} $THROUGHPUT_FILE"
         echo -e "${BLUE}Latency results:${NC} $LATENCY_FILE"
+        echo -e "${BLUE}GC profile results:${NC} $GC_PROFILE_FILE"
+        echo -e "${BLUE}GC log:${NC} $GC_LOG"
         ;;
         
     "throughput")
