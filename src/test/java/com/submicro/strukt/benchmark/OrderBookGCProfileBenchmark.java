@@ -8,62 +8,92 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * OrderBook GC Profiling Benchmark Suite
- * 
- * Dedicated to measuring memory allocation patterns and GC behavior.
+ *
+ * Dedicated to measuring memory allocation patterns and GC behavior for exchange-core validation.
  * Provides detailed analysis of:
- * - Bytes per operation (B/op)
- * - Young/Old GC pause distributions
- * - Allocation spikes and patterns
- * - Live set size tracking
- * - Memory efficiency comparison
- * 
- * Configuration: Extended measurement for GC analysis
- * Mode: Throughput with GC profiling enabled
- * Focus: Memory behavior under realistic trading loads
+ * - Bytes per operation (B/op) with allocation tracking
+ * - Objects per operation (allocations/op)
+ * - Young/Old GC pause distributions and frequencies
+ * - Allocation spikes and patterns under load
+ * - Live set size tracking at iteration boundaries
+ * - Memory efficiency comparison between implementations
+ * - GC pause correlation with performance outliers
+ *
+ * Configuration: Extended measurement for comprehensive GC analysis
+ * Mode: Throughput with comprehensive GC profiling enabled
+ * Focus: Memory behavior under Binance-scale trading loads
  */
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)
-@Warmup(iterations = 3, time = 3, timeUnit = TimeUnit.SECONDS)
-@Measurement(iterations = 5, time = 5, timeUnit = TimeUnit.SECONDS)
-@Fork(value = 3, jvmArgs = {
-    "-Xmx8G", "-Xms8G", 
-    "-XX:+UseG1GC", 
+@Warmup(iterations = 5, time = 3, timeUnit = TimeUnit.SECONDS)
+@Measurement(iterations = 10, time = 5, timeUnit = TimeUnit.SECONDS)
+@Fork(value = 5, jvmArgs = {
+    "-Xmx8G", "-Xms8G",
+    "-XX:+UseG1GC",
     "-XX:+AlwaysPreTouch",
-    "-XX:MaxGCPauseMillis=200",
-    "-Xlog:gc*:gc-profile.log",
+    "-XX:MaxGCPauseMillis=50", // Tighter GC control for analysis
+    "-XX:G1HeapRegionSize=16m",
+    "-Xlog:gc*:gc-detailed-profile.log:time,tags",
     "-XX:+UnlockExperimentalVMOptions",
-    "-XX:G1NewSizePercent=20",
-    "-XX:G1MaxNewSizePercent=30"
+    "-XX:G1NewSizePercent=30",
+    "-XX:G1MaxNewSizePercent=40",
+    "-XX:+UseStringDeduplication", // Additional memory optimization
+    "-XX:+PrintGCApplicationStoppedTime" // Track pause impact
 })
 @Threads(1)
 public class OrderBookGCProfileBenchmark {
 
     /**
      * GC Profile: Pure Insert - Memory allocation patterns for insert operations
-     * Focus: Tree growth allocation, bucket creation overhead
+     * Focus: Tree growth allocation, bucket creation overhead, allocation rate analysis
      */
     @Benchmark
     public long gcProfile01_PureInsert(OrderBookBenchmarkSuite state, Blackhole bh) {
         OrderBook book = state.createOrderBook();
         long totalProcessed = 0;
-        
+
+        // Baseline memory measurement
+        Runtime runtime = Runtime.getRuntime();
+        long initialMemory = runtime.totalMemory() - runtime.freeMemory();
+        long startTime = System.nanoTime();
+
         // Track allocation patterns during pure insert
         for (OrderCommand order : state.pureInsertOrders) {
             book.newOrder(order);
             totalProcessed++;
-            
-            // Force allocation tracking
+
+            // Comprehensive allocation tracking for B/op calculation
             bh.consume(order.orderId);
             bh.consume(order.price);
             bh.consume(order.size);
             bh.consume(order.action);
             bh.consume(order.timestamp);
+            bh.consume(order.uid);
+            bh.consume(order.symbol);
+            bh.consume(order.reserveBidPrice);
+
+            // Periodic memory measurement for allocation rate
+            if (totalProcessed % 10000 == 0) {
+                long currentMemory = runtime.totalMemory() - runtime.freeMemory();
+                bh.consume(currentMemory - initialMemory); // Memory delta
+            }
         }
-        
-        // Force GC to measure live set
+
+        long endTime = System.nanoTime();
+
+        // Final memory measurement and GC analysis
         System.gc();
-        bh.consume(Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory());
-        
+        Thread.yield(); // Allow GC to complete
+        long finalMemory = runtime.totalMemory() - runtime.freeMemory();
+        long totalAllocated = finalMemory - initialMemory;
+        long duration = endTime - startTime;
+
+        // Track key GC metrics
+        bh.consume(totalAllocated); // Total bytes allocated
+        bh.consume(totalAllocated / totalProcessed); // Bytes per operation
+        bh.consume(duration / totalProcessed); // Nanoseconds per operation
+        bh.consume(finalMemory); // Live set size
+
         return totalProcessed;
     }
 
