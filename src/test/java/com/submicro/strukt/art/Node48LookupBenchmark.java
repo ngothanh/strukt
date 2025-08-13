@@ -1,4 +1,4 @@
-package com.submicro.strukt.benchmark;
+package com.submicro.strukt.art;
 
 import org.openjdk.jmh.annotations.*;
 

@@ -1,7 +1,5 @@
-package com.submicro.strukt.benchmark;
+package com.submicro.strukt.art;
 
-import com.submicro.strukt.art.LongAdaptiveRadixTreeMap;
-import com.submicro.strukt.art.LongObjConsumer;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
